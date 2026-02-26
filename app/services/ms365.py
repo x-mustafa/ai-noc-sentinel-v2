@@ -1,22 +1,23 @@
 """
-Microsoft 365 integration service.
-- Send emails via SMTP (smtp.office365.com)
-- Send Teams messages via incoming webhook
-- Read recent inbox via IMAP
-- Each AI employee is identified by name in the From display name
+Microsoft 365 integration via Graph API (app-only / client credentials).
+
+Permissions required on the Azure App Registration:
+  - Mail.Send          (Application)
+  - Mail.ReadWrite     (Application)
+  - User.Read.All      (Application — optional, for display)
+
+Token endpoint:
+  POST https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token
 """
-import asyncio
-import email as email_lib
-import imaplib
 import logging
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import time
 from typing import Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+GRAPH = "https://graph.microsoft.com/v1.0"
 
 EMPLOYEE_NAMES = {
     "aria":   "ARIA — NOC Analyst",
@@ -25,8 +26,41 @@ EMPLOYEE_NAMES = {
     "vega":   "VEGA — Site Reliability Engineer",
 }
 
+# ── Token cache (in-memory, refreshed 5 min before expiry) ────────────────────
 
-# ── Email sending via SMTP ────────────────────────────────────────────────────
+_token_cache: dict = {"token": None, "expires_at": 0}
+
+
+async def _get_token() -> str:
+    """Obtain (or return cached) Graph API access token via client credentials."""
+    from app.config import settings
+    now = time.time()
+    if _token_cache["token"] and now < _token_cache["expires_at"] - 300:
+        return _token_cache["token"]
+
+    url = f"https://login.microsoftonline.com/{settings.ms365_tenant_id}/oauth2/v2.0/token"
+    data = {
+        "grant_type":    "client_credentials",
+        "client_id":     settings.ms365_client_id,
+        "client_secret": settings.ms365_client_secret,
+        "scope":         "https://graph.microsoft.com/.default",
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(url, data=data)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Token fetch failed {resp.status_code}: {resp.text[:300]}")
+    j = resp.json()
+    _token_cache["token"]      = j["access_token"]
+    _token_cache["expires_at"] = now + int(j.get("expires_in", 3600))
+    return _token_cache["token"]
+
+
+def _is_configured() -> bool:
+    from app.config import settings
+    return bool(settings.ms365_tenant_id and settings.ms365_client_id and settings.ms365_client_secret)
+
+
+# ── Send email via Graph API ──────────────────────────────────────────────────
 
 async def send_email(
     to: str | list[str],
@@ -35,46 +69,92 @@ async def send_email(
     employee_id: str = "aria",
     html: bool = False,
 ) -> dict:
-    """Send an email via Office 365 SMTP on behalf of an AI employee."""
+    """Send an email on behalf of the shared NOC mailbox using Graph API."""
     from app.config import settings
-    if not settings.ms365_email or not settings.ms365_password:
-        return {"ok": False, "error": "M365 credentials not configured"}
-
-    try:
-        import aiosmtplib
-    except ImportError:
-        return {"ok": False, "error": "aiosmtplib not installed — run: pip install aiosmtplib"}
+    if not _is_configured():
+        return {"ok": False, "error": "Graph API credentials not configured"}
+    if not settings.ms365_email:
+        return {"ok": False, "error": "MS365_EMAIL not set"}
 
     to_list = [to] if isinstance(to, str) else to
     emp_name = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
-    from_addr = f"{emp_name} via NOC Sentinel <{settings.ms365_email}>"
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = from_addr
-    msg["To"]      = ", ".join(to_list)
-    msg["Reply-To"] = settings.ms365_email
-
-    content_type = "html" if html else "plain"
-    msg.attach(MIMEText(body, content_type, "utf-8"))
+    payload = {
+        "message": {
+            "subject": subject,
+            "body": {
+                "contentType": "HTML" if html else "Text",
+                "content": body,
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": addr}} for addr in to_list
+            ],
+            "from": {
+                "emailAddress": {
+                    "name":    f"{emp_name} via NOC Sentinel",
+                    "address": settings.ms365_email,
+                }
+            },
+        },
+        "saveToSentItems": "true",
+    }
 
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.ms365_smtp_host,
-            port=settings.ms365_smtp_port,
-            username=settings.ms365_email,
-            password=settings.ms365_password,
-            start_tls=True,
-        )
-        logger.info(f"Email sent to {to_list} from {employee_id}")
-        return {"ok": True, "to": to_list, "subject": subject}
+        token = await _get_token()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        url = f"{GRAPH}/users/{settings.ms365_email}/sendMail"
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code == 202:
+            logger.info(f"Email sent to {to_list} from {employee_id}")
+            return {"ok": True, "to": to_list, "subject": subject}
+        return {"ok": False, "error": f"Graph {resp.status_code}: {resp.text[:300]}"}
     except Exception as e:
-        logger.error(f"SMTP send failed: {e}")
+        logger.error(f"Graph send_email failed: {e}")
         return {"ok": False, "error": str(e)}
 
 
-# ── Teams message via incoming webhook ────────────────────────────────────────
+# ── Read inbox via Graph API ───────────────────────────────────────────────────
+
+async def get_inbox(limit: int = 20) -> list[dict]:
+    """Fetch recent emails from the shared NOC mailbox."""
+    from app.config import settings
+    if not _is_configured():
+        return [{"error": "Graph API credentials not configured"}]
+    if not settings.ms365_email:
+        return [{"error": "MS365_EMAIL not set"}]
+
+    try:
+        token = await _get_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        url = (
+            f"{GRAPH}/users/{settings.ms365_email}/mailFolders/inbox/messages"
+            f"?$top={limit}&$orderby=receivedDateTime desc"
+            f"&$select=id,subject,from,receivedDateTime,bodyPreview,isRead"
+        )
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(url, headers=headers)
+        if resp.status_code != 200:
+            return [{"error": f"Graph {resp.status_code}: {resp.text[:200]}"}]
+        messages = resp.json().get("value", [])
+        return [
+            {
+                "id":        m.get("id", ""),
+                "subject":   m.get("subject", "(no subject)"),
+                "from":      m.get("from", {}).get("emailAddress", {}).get("address", ""),
+                "from_name": m.get("from", {}).get("emailAddress", {}).get("name", ""),
+                "date":      m.get("receivedDateTime", ""),
+                "preview":   m.get("bodyPreview", "")[:300],
+                "is_read":   m.get("isRead", True),
+            }
+            for m in messages
+        ]
+    except Exception as e:
+        logger.error(f"Graph get_inbox failed: {e}")
+        return [{"error": str(e)}]
+
+
+# ── Teams message via incoming webhook (no Graph API needed) ──────────────────
 
 async def send_teams_message(
     webhook_url: str,
@@ -86,22 +166,17 @@ async def send_teams_message(
     if not webhook_url:
         return {"ok": False, "error": "No Teams webhook URL configured"}
 
-    emp_name  = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
+    emp_name   = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
     emp_colors = {"aria": "00D4FF", "nexus": "A855F7", "cipher": "FF8C00", "vega": "4ADE80"}
-    color = emp_colors.get(employee_id, "0078D4")
 
-    # Adaptive Card payload for rich Teams message
     card_body = []
     if title:
         card_body.append({"type": "TextBlock", "text": title, "weight": "Bolder", "size": "Medium"})
-    card_body.append({
-        "type": "TextBlock", "text": message,
-        "wrap": True, "color": "Default"
-    })
+    card_body.append({"type": "TextBlock", "text": message, "wrap": True, "color": "Default"})
     card_body.append({
         "type": "TextBlock",
         "text": f"— {emp_name} | NOC Sentinel",
-        "size": "Small", "color": "Accent", "isSubtle": True
+        "size": "Small", "color": "Accent", "isSubtle": True,
     })
 
     payload = {
@@ -113,9 +188,9 @@ async def send_teams_message(
                 "type": "AdaptiveCard",
                 "version": "1.4",
                 "body": card_body,
-                "msteams": {"width": "Full"}
-            }
-        }]
+                "msteams": {"width": "Full"},
+            },
+        }],
     }
 
     try:
@@ -129,82 +204,27 @@ async def send_teams_message(
         return {"ok": False, "error": str(e)}
 
 
-# ── Read inbox via IMAP (sync wrapped) ────────────────────────────────────────
+# ── Test Graph API connectivity ────────────────────────────────────────────────
 
-def _imap_fetch_inbox(email_addr: str, password: str, host: str, port: int, limit: int = 10) -> list[dict]:
-    """Sync IMAP read — call via asyncio.to_thread."""
-    try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        mail = imaplib.IMAP4_SSL(host, port, ssl_context=ctx)
-        mail.login(email_addr, password)
-        mail.select("INBOX")
-        _, data = mail.search(None, "ALL")
-        ids = data[0].split()
-        ids = ids[-limit:] if len(ids) > limit else ids
-        ids = list(reversed(ids))  # newest first
-
-        messages = []
-        for uid in ids:
-            _, msg_data = mail.fetch(uid, "(RFC822)")
-            raw = msg_data[0][1]
-            msg = email_lib.message_from_bytes(raw)
-            subject = str(msg.get("Subject", "(no subject)"))
-            from_   = str(msg.get("From", ""))
-            date_   = str(msg.get("Date", ""))
-            body    = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        body = part.get_payload(decode=True).decode(errors="replace")
-                        break
-            else:
-                body = msg.get_payload(decode=True).decode(errors="replace")
-            messages.append({
-                "uid":     uid.decode(),
-                "subject": subject,
-                "from":    from_,
-                "date":    date_,
-                "preview": body[:300].strip(),
-            })
-        mail.logout()
-        return messages
-    except Exception as e:
-        logger.error(f"IMAP fetch failed: {e}")
-        return [{"error": str(e)}]
-
-
-async def get_inbox(limit: int = 10) -> list[dict]:
-    """Read recent emails from NOC Sentinel inbox."""
+async def test_graph() -> dict:
+    """Test Graph API token acquisition and basic mailbox access."""
     from app.config import settings
-    if not settings.ms365_email or not settings.ms365_password:
-        return [{"error": "M365 credentials not configured"}]
-    return await asyncio.to_thread(
-        _imap_fetch_inbox,
-        settings.ms365_email, settings.ms365_password,
-        settings.ms365_imap_host, settings.ms365_imap_port,
-        limit,
-    )
-
-
-# ── Test connectivity ─────────────────────────────────────────────────────────
-
-async def test_smtp() -> dict:
-    """Test SMTP connection without sending an email."""
-    from app.config import settings
-    if not settings.ms365_email or not settings.ms365_password:
-        return {"ok": False, "error": "Credentials not configured"}
+    if not _is_configured():
+        return {"ok": False, "error": "Graph API credentials not configured"}
     try:
-        import aiosmtplib
-        smtp = aiosmtplib.SMTP(
-            hostname=settings.ms365_smtp_host,
-            port=settings.ms365_smtp_port,
-            start_tls=True,
-        )
-        await smtp.connect()
-        await smtp.login(settings.ms365_email, settings.ms365_password)
-        await smtp.quit()
-        return {"ok": True, "message": f"SMTP connected as {settings.ms365_email}"}
+        token = await _get_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        url = f"{GRAPH}/users/{settings.ms365_email}?$select=displayName,mail,userPrincipalName"
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers=headers)
+        if resp.status_code == 200:
+            u = resp.json()
+            return {
+                "ok":          True,
+                "displayName": u.get("displayName", ""),
+                "mail":        u.get("mail") or u.get("userPrincipalName", ""),
+                "message":     "Graph API connected successfully",
+            }
+        return {"ok": False, "error": f"Graph {resp.status_code}: {resp.text[:200]}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}

@@ -1,12 +1,12 @@
 """
-Microsoft 365 router — Outlook email + Teams messaging.
+Microsoft 365 router — Outlook email + Teams messaging via Graph API.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 
 from app.deps import get_session, require_operator
-from app.services.ms365 import send_email, send_teams_message, get_inbox, test_smtp
+from app.services.ms365 import send_email, send_teams_message, get_inbox, test_graph
 from app.database import fetch_all, execute
 
 router = APIRouter()
@@ -39,13 +39,17 @@ class SaveTeamsWebhookBody(BaseModel):
 
 @router.get("/status")
 async def m365_status(session: dict = Depends(get_session)):
-    """Test SMTP connectivity and return M365 config status."""
+    """Test Graph API connectivity and return M365 config status."""
     from app.config import settings
-    result = await test_smtp()
+    result = await test_graph()
     return {
-        "smtp": result,
+        "graph": result,
         "email": settings.ms365_email or "(not configured)",
-        "configured": bool(settings.ms365_email and settings.ms365_password),
+        "configured": bool(
+            settings.ms365_tenant_id and
+            settings.ms365_client_id and
+            settings.ms365_client_secret
+        ),
     }
 
 

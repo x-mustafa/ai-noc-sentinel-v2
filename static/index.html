@@ -1788,9 +1788,9 @@ select.form-inp option{background:#0d1628}
 
           <!-- Account info -->
           <div style="background:rgba(0,120,212,0.08);border:1px solid rgba(0,120,212,0.2);border-radius:10px;padding:14px 16px">
-            <div style="font-size:11px;font-weight:700;color:#0078d4;margin-bottom:8px">📧 Shared Account</div>
+            <div style="font-size:11px;font-weight:700;color:#0078d4;margin-bottom:8px">📧 Shared Mailbox — Graph API</div>
             <div style="font-size:12px;color:var(--text)">nsentinal@tabadul.iq</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px">All AI employees share this Office 365 mailbox. Emails are sent with the employee name in the From field.</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">Connected via Microsoft Graph API (app-only). All AI employees share this mailbox — emails show the employee name in the From field.</div>
           </div>
 
           <!-- Quick Send Email -->
@@ -5641,11 +5641,11 @@ async function loadM365Status() {
   try {
     const r = await fetch('/api/ms365/status', { credentials: 'include' });
     const d = await r.json();
-    if (d.smtp?.ok) {
-      badge.textContent = '● Connected';
+    if (d.graph?.ok) {
+      badge.textContent = '● Connected — ' + (d.graph.displayName || d.email);
       badge.style.cssText = 'font-size:10px;padding:3px 9px;border-radius:10px;border:1px solid rgba(0,120,212,0.3);color:#4da6ff;background:rgba(0,120,212,0.08)';
     } else {
-      badge.textContent = '● Error: ' + (d.smtp?.error || 'unknown');
+      badge.textContent = '● Error: ' + (d.graph?.error || 'unknown');
       badge.style.cssText = 'font-size:10px;padding:3px 9px;border-radius:10px;border:1px solid rgba(248,113,113,0.3);color:#f87171;background:rgba(248,113,113,0.06)';
     }
     loadM365Webhooks();

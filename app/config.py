@@ -10,14 +10,11 @@ class Settings(BaseSettings):
     app_secret: str = "change_this_to_a_random_string_at_least_32_chars_long"
     session_max_age: int = 86400 * 7  # 7 days
 
-    # Microsoft 365
-    ms365_email:        str = ""
-    ms365_password:     str = ""
-    ms365_smtp_host:    str = "smtp.office365.com"
-    ms365_smtp_port:    int = 587
-    ms365_imap_host:    str = "outlook.office365.com"
-    ms365_imap_port:    int = 993
-    ms365_display_name: str = "NOC Sentinel AI"
+    # Microsoft 365 — Graph API
+    ms365_email:         str = ""
+    ms365_tenant_id:     str = ""
+    ms365_client_id:     str = ""
+    ms365_client_secret: str = ""
 
     class Config:
         env_file = ".env"
