@@ -684,7 +684,7 @@ table.alarms-tbl{width:100%;border-collapse:collapse}
 .wf-step-label{font-size:10px;font-weight:700;letter-spacing:0.8px;color:var(--muted);text-transform:uppercase;margin:14px 0 8px}
 .wf-trigger-cards,.wf-emp-cards,.wf-action-cards{display:grid;gap:8px}
 .wf-trigger-cards{grid-template-columns:repeat(3,1fr)}
-.wf-action-cards{grid-template-columns:repeat(3,1fr)}
+.wf-action-cards{grid-template-columns:repeat(4,1fr)}
 .wf-emp-cards{grid-template-columns:repeat(4,1fr)}
 .wf-tc,.wf-ec,.wf-ac{
   padding:10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.02);
@@ -2015,6 +2015,73 @@ select.form-inp option{background:#0d1628}
             </div>
           </div>
 
+          <!-- ══ Communications Hub ══ -->
+          <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+            <div style="font-size:11px;font-weight:700;color:#a855f7;margin-bottom:12px">📡 Communications Hub</div>
+
+            <!-- Sub-tabs -->
+            <div style="display:flex;gap:6px;margin-bottom:12px">
+              <button id="chub-tab-teams" onclick="switchCommsHub('teams')" style="padding:4px 14px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid rgba(98,100,167,0.5);background:rgba(98,100,167,0.2);color:#8b8dcc;cursor:pointer">💬 Teams Chats</button>
+              <button id="chub-tab-wa" onclick="switchCommsHub('wa')" style="padding:4px 14px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--muted);cursor:pointer">📱 WhatsApp</button>
+            </div>
+
+            <!-- Teams Chats panel -->
+            <div id="chub-panel-teams">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                <select id="chub-teams-emp" class="form-inp" style="width:160px;font-size:10px">
+                  <option value="aria">ARIA</option>
+                  <option value="nexus">NEXUS</option>
+                  <option value="cipher">CIPHER</option>
+                  <option value="vega">VEGA</option>
+                </select>
+                <button onclick="commsLoadTeamsChats()" style="padding:4px 14px;border-radius:5px;font-size:10px;font-weight:600;border:1px solid rgba(98,100,167,0.4);background:rgba(98,100,167,0.1);color:#8b8dcc;cursor:pointer">↻ Load Chats</button>
+                <span id="chub-teams-status" style="font-size:10px;color:var(--muted)"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:200px 1fr;gap:8px;min-height:200px;max-height:320px">
+                <div id="chub-teams-list" style="overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,0.2)">
+                  <div style="font-size:10px;color:var(--muted);padding:10px;font-style:italic">Click Load Chats</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div id="chub-teams-msgs" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,0.2);padding:8px;min-height:140px;max-height:220px;font-size:10px;color:var(--muted)">Select a chat to view messages.</div>
+                  <div style="display:flex;gap:6px">
+                    <input id="chub-teams-reply" class="form-inp" placeholder="Type a message..." style="flex:1;font-size:10px">
+                    <button onclick="commsSendTeamsChat()" style="padding:4px 14px;border-radius:5px;font-size:10px;font-weight:700;border:1px solid rgba(98,100,167,0.4);background:rgba(98,100,167,0.12);color:#8b8dcc;cursor:pointer;white-space:nowrap">Send ↗</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- WhatsApp Conversations panel -->
+            <div id="chub-panel-wa" style="display:none">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                <select id="chub-wa-emp" class="form-inp" style="width:160px;font-size:10px">
+                  <option value="aria">ARIA</option>
+                  <option value="nexus">NEXUS</option>
+                  <option value="cipher">CIPHER</option>
+                  <option value="vega">VEGA</option>
+                </select>
+                <button onclick="commsLoadWAConvos()" style="padding:4px 14px;border-radius:5px;font-size:10px;font-weight:600;border:1px solid rgba(74,222,128,0.4);background:rgba(74,222,128,0.07);color:#4ade80;cursor:pointer">↻ Load Chats</button>
+                <span id="chub-wa-status" style="font-size:10px;color:var(--muted)"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:200px 1fr;gap:8px;min-height:200px;max-height:320px">
+                <div id="chub-wa-list" style="overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,0.2)">
+                  <div style="font-size:10px;color:var(--muted);padding:10px;font-style:italic">Click Load Chats</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div id="chub-wa-msgs" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,0.2);padding:8px;min-height:140px;max-height:220px;font-size:10px;color:var(--muted)">Select a conversation to view messages.</div>
+                  <div style="display:flex;gap:6px">
+                    <input id="chub-wa-reply" class="form-inp" placeholder="Type a message..." style="flex:1;font-size:10px">
+                    <button onclick="commsSendWA()" style="padding:4px 14px;border-radius:5px;font-size:10px;font-weight:700;border:1px solid rgba(74,222,128,0.4);background:rgba(74,222,128,0.1);color:#4ade80;cursor:pointer;white-space:nowrap">Send ↗</button>
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <span style="font-size:9px;color:var(--muted)">Call link:</span>
+                    <span id="chub-wa-call-link" style="font-size:9px;color:#4ade80;font-family:monospace"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -2238,12 +2305,27 @@ select.form-inp option{background:#0d1628}
       <div class="wf-ac" onclick="wfSelectAction('email')" id="wac-email">
         <div class="wf-ac-icon">📧</div>
         <div class="wf-ac-title">Send Email</div>
-        <div class="wf-ac-desc">Email via Office 365</div>
+        <div class="wf-ac-desc">Multi-recipient O365</div>
       </div>
       <div class="wf-ac" onclick="wfSelectAction('teams')" id="wac-teams">
+        <div class="wf-ac-icon">🔗</div>
+        <div class="wf-ac-title">Teams Webhook</div>
+        <div class="wf-ac-desc">Incoming webhook URL</div>
+      </div>
+      <div class="wf-ac" onclick="wfSelectAction('teams_chat')" id="wac-teams_chat">
         <div class="wf-ac-icon">💬</div>
-        <div class="wf-ac-title">Teams Message</div>
-        <div class="wf-ac-desc">Post to Teams channel</div>
+        <div class="wf-ac-title">Teams Chat</div>
+        <div class="wf-ac-desc">Group chat via Graph</div>
+      </div>
+      <div class="wf-ac" onclick="wfSelectAction('teams_channel')" id="wac-teams_channel">
+        <div class="wf-ac-icon">📢</div>
+        <div class="wf-ac-title">Teams Channel</div>
+        <div class="wf-ac-desc">Channel via Graph API</div>
+      </div>
+      <div class="wf-ac" onclick="wfSelectAction('whatsapp_dm')" id="wac-whatsapp_dm">
+        <div class="wf-ac-icon">📩</div>
+        <div class="wf-ac-title">WhatsApp DM</div>
+        <div class="wf-ac-desc">Direct message via WA</div>
       </div>
     </div>
     <input type="hidden" id="wf-f-action" value="log">
@@ -2293,7 +2375,7 @@ select.form-inp option{background:#0d1628}
     <!-- Email action config -->
     <div id="wf-action-email" style="display:none;margin-top:10px">
       <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
-        <b style="color:#00d4ff">Email via Office 365:</b> The AI employee will send the workflow result as an email. Make sure M365 credentials are configured in Settings.
+        <b style="color:#00d4ff">Email via Office 365:</b> AI employee sends workflow result as email. Supports multiple recipients (comma-separated).
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <div>
@@ -2306,20 +2388,26 @@ select.form-inp option{background:#0d1628}
           </select>
         </div>
         <div>
-          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">To (email address)</div>
-          <input id="wf-f-email-to" class="form-inp" placeholder="recipient@company.com" style="width:100%">
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">To (comma-separated)</div>
+          <input id="wf-f-email-to" class="form-inp" placeholder="user@co.com, manager@co.com" style="width:100%">
         </div>
       </div>
-      <div>
-        <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Subject</div>
-        <input id="wf-f-email-subject" class="form-inp" placeholder="NOC Sentinel Alert — {workflow_name}" style="width:100%">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Subject</div>
+          <input id="wf-f-email-subject" class="form-inp" placeholder="NOC Sentinel — {workflow_name}" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">CC (optional)</div>
+          <input id="wf-f-email-cc" class="form-inp" placeholder="cc@company.com" style="width:100%">
+        </div>
       </div>
     </div>
 
-    <!-- Teams action config -->
+    <!-- Teams Webhook action config -->
     <div id="wf-action-teams" style="display:none;margin-top:10px">
       <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
-        <b style="color:#7c3aed">Teams Message:</b> The AI employee will post the result to a Microsoft Teams channel. Webhooks are managed in the Office → M365 tab.
+        <b style="color:#7c3aed">Teams Webhook:</b> Post to a Teams channel via incoming webhook. Manage webhooks in Office → M365 tab.
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <div>
@@ -2339,9 +2427,91 @@ select.form-inp option{background:#0d1628}
         </div>
       </div>
       <input type="hidden" id="wf-f-teams-webhook-url" value="">
-      <div style="font-size:9px;color:var(--muted);margin-top:4px">
-        Don't see your channel? Add it in <b style="color:#a78bfa">Office → M365 → Teams Webhooks</b>
+    </div>
+
+    <!-- Teams Chat (Graph API) action config -->
+    <div id="wf-action-teams_chat" style="display:none;margin-top:10px">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+        <b style="color:#7c3aed">Teams Group Chat:</b> Send directly to a Teams group chat via Graph API. Requires <code style="color:#a78bfa;font-size:9px">Chat.ReadWrite.All</code> permission.
       </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Send from employee</div>
+          <select id="wf-f-teams-chat-emp" class="form-inp" style="width:100%">
+            <option value="aria">ARIA — NOC Analyst</option>
+            <option value="nexus">NEXUS — Infrastructure Engineer</option>
+            <option value="cipher">CIPHER — Security Analyst</option>
+            <option value="vega">VEGA — Site Reliability Engineer</option>
+          </select>
+        </div>
+        <button onclick="wfLoadTeamsChats()" style="padding:6px 14px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid rgba(124,58,237,0.4);background:rgba(124,58,237,0.07);color:#a78bfa;cursor:pointer;white-space:nowrap">
+          📋 Load Chats
+        </button>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Target Group Chat</div>
+      <select id="wf-f-teams-chat-id" class="form-inp" style="width:100%">
+        <option value="">— click Load Chats first —</option>
+      </select>
+      <input type="hidden" id="wf-f-teams-chat-name" value="">
+      <div id="wf-teams-chat-status" style="font-size:10px;color:var(--muted);margin-top:5px"></div>
+    </div>
+
+    <!-- Teams Channel (Graph API) action config -->
+    <div id="wf-action-teams_channel" style="display:none;margin-top:10px">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+        <b style="color:#7c3aed">Teams Channel (Graph API):</b> Post to a channel inside a Team directly. Requires <code style="color:#a78bfa;font-size:9px">ChannelMessage.Send</code> permission.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Team</div>
+          <select id="wf-f-teams-channel-team" class="form-inp" style="width:100%" onchange="wfLoadTeamChannels()">
+            <option value="">— Load Teams first —</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Channel</div>
+          <select id="wf-f-teams-channel-id" class="form-inp" style="width:100%">
+            <option value="">— Select team first —</option>
+          </select>
+        </div>
+        <button onclick="wfLoadTeamsList()" style="padding:6px 14px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid rgba(124,58,237,0.4);background:rgba(124,58,237,0.07);color:#a78bfa;cursor:pointer;white-space:nowrap">
+          📋 Load Teams
+        </button>
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Send from employee</div>
+        <select id="wf-f-teams-channel-emp" class="form-inp" style="width:200px">
+          <option value="aria">ARIA — NOC Analyst</option>
+          <option value="nexus">NEXUS — Infrastructure Engineer</option>
+          <option value="cipher">CIPHER — Security Analyst</option>
+          <option value="vega">VEGA — Site Reliability Engineer</option>
+        </select>
+      </div>
+      <input type="hidden" id="wf-f-teams-channel-team-id" value="">
+      <div id="wf-teams-channel-status" style="font-size:10px;color:var(--muted);margin-top:5px"></div>
+    </div>
+
+    <!-- WhatsApp DM action config -->
+    <div id="wf-action-whatsapp_dm" style="display:none;margin-top:10px">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+        <b style="color:#4ade80">WhatsApp Direct Message:</b> AI employee sends the workflow result as a private message to a specific contact. Make sure the WhatsApp service is running.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Send from employee</div>
+          <select id="wf-f-wa-dm-emp" class="form-inp" style="width:100%">
+            <option value="aria">ARIA — NOC Analyst</option>
+            <option value="nexus">NEXUS — Infrastructure Engineer</option>
+            <option value="cipher">CIPHER — Security Analyst</option>
+            <option value="vega">VEGA — Site Reliability Engineer</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Recipient (phone or JID)</div>
+          <input id="wf-f-wa-dm-jid" class="form-inp" placeholder="9647xxxxxxxxx or ...@s.whatsapp.net" style="width:100%;font-family:monospace;font-size:10px">
+        </div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-top:5px">Format: phone without + (e.g. <code style="color:#7de0a0">9647801234567</code>) or full JID copied from the Communications Hub.</div>
     </div>
 
     <!-- Enable toggle -->
@@ -5578,7 +5748,7 @@ async function loadWorkflows() {
   const empColors = {aria:'#00d4ff',nexus:'#a855f7',cipher:'#ff8c00',vega:'#4ade80'};
   const empNames  = {aria:'ARIA',nexus:'NEXUS',cipher:'CIPHER',vega:'VEGA'};
   const trigIcons = {manual:'🖱️',alarm:'🔔',schedule:'🕐'};
-  const actIcons  = {log:'📝',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'💬'};
+  const actIcons  = {log:'📝',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
   grid.innerHTML = wfs.map(w => {
     const tc = w.trigger_config ? (typeof w.trigger_config==='string'?JSON.parse(w.trigger_config):w.trigger_config) : {};
     let trigDetail = '';
@@ -5628,18 +5798,20 @@ function wfSelectEmp(e) {
   });
   document.getElementById('wf-f-employee').value = e;
 }
+const _WF_ACTION_TYPES = ['log','webhook','zabbix_ack','whatsapp_group','email','teams','teams_chat','teams_channel','whatsapp_dm'];
 function wfSelectAction(a) {
-  ['log','webhook','zabbix_ack','whatsapp_group','email','teams'].forEach(v => {
+  _WF_ACTION_TYPES.forEach(v => {
     const el = document.getElementById(`wac-${v}`);
     if (el) el.classList.toggle('active', v===a);
   });
   document.getElementById('wf-f-action').value = a;
-  document.getElementById('wf-action-webhook').style.display        = a==='webhook'         ? '' : 'none';
-  document.getElementById('wf-action-whatsapp_group').style.display = a==='whatsapp_group'  ? '' : 'none';
-  document.getElementById('wf-action-email').style.display          = a==='email'           ? '' : 'none';
-  document.getElementById('wf-action-teams').style.display          = a==='teams'           ? '' : 'none';
-  // Auto-load Teams webhooks when teams action selected
-  if (a === 'teams') wfLoadTeamsWebhooks();
+  _WF_ACTION_TYPES.forEach(v => {
+    const panel = document.getElementById(`wf-action-${v}`);
+    if (panel) panel.style.display = v===a ? '' : 'none';
+  });
+  if (a === 'teams')         wfLoadTeamsWebhooks();
+  if (a === 'teams_chat')    wfLoadTeamsChats();
+  if (a === 'teams_channel') wfLoadTeamsList();
 }
 async function wfLoadGroups() {
   const empId  = document.getElementById('wf-f-wa-emp').value;
@@ -5687,6 +5859,70 @@ async function wfLoadTeamsWebhooks() {
 function wfTeamsWebhookChange() {
   const sel = document.getElementById('wf-f-teams-webhook');
   document.getElementById('wf-f-teams-webhook-url').value = sel.value;
+}
+async function wfLoadTeamsChats() {
+  const sel    = document.getElementById('wf-f-teams-chat-id');
+  const status = document.getElementById('wf-teams-chat-status');
+  status.textContent = 'Loading chats…'; status.style.color = 'var(--muted)';
+  try {
+    const data = await api('/api/ms365/chats');
+    if (!Array.isArray(data) || !data.length) {
+      sel.innerHTML = '<option value="">— No group chats found —</option>';
+      status.textContent = 'No chats found. Make sure Chat.ReadWrite.All permission is granted in Azure.';
+      status.style.color = '#ffb300'; return;
+    }
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— Select a chat —</option>' +
+      data.map(c => `<option value="${c.id}" data-name="${(c.topic||c.id).replace(/"/g,'&quot;')}" ${c.id===cur?'selected':''}>${c.topic || '(no topic)'} [${c.chatType}]</option>`).join('');
+    status.textContent = `✓ ${data.length} chat(s) loaded.`; status.style.color = '#4ade80';
+  } catch(e) {
+    status.textContent = `✗ ${e.message}`; status.style.color = '#f87171';
+    sel.innerHTML = '<option value="">— Error loading chats —</option>';
+  }
+}
+async function wfLoadTeamsList() {
+  const teamSel = document.getElementById('wf-f-teams-channel-team');
+  const chanSel = document.getElementById('wf-f-teams-channel-id');
+  const status  = document.getElementById('wf-teams-channel-status');
+  status.textContent = 'Loading teams…'; status.style.color = 'var(--muted)';
+  try {
+    const data = await api('/api/ms365/teams');
+    if (!Array.isArray(data) || !data.length) {
+      teamSel.innerHTML = '<option value="">— No teams found —</option>';
+      status.textContent = 'No teams found. Make sure Team.ReadBasic.All permission is granted.';
+      status.style.color = '#ffb300'; return;
+    }
+    teamSel.innerHTML = '<option value="">— Select a team —</option>' +
+      data.map(t => `<option value="${t.id}" data-name="${(t.displayName||'').replace(/"/g,'&quot;')}">${t.displayName}</option>`).join('');
+    chanSel.innerHTML = '<option value="">— Select team first —</option>';
+    status.textContent = `✓ ${data.length} team(s) loaded.`; status.style.color = '#4ade80';
+  } catch(e) {
+    status.textContent = `✗ ${e.message}`; status.style.color = '#f87171';
+    teamSel.innerHTML = '<option value="">— Error loading teams —</option>';
+  }
+}
+async function wfLoadTeamChannels() {
+  const teamSel  = document.getElementById('wf-f-teams-channel-team');
+  const chanSel  = document.getElementById('wf-f-teams-channel-id');
+  const teamIdEl = document.getElementById('wf-f-teams-channel-team-id');
+  const status   = document.getElementById('wf-teams-channel-status');
+  const teamId   = teamSel.value;
+  if (!teamId) { chanSel.innerHTML = '<option value="">— Select team first —</option>'; return; }
+  teamIdEl.value = teamId;
+  status.textContent = 'Loading channels…'; status.style.color = 'var(--muted)';
+  try {
+    const data = await api(`/api/ms365/teams/${teamId}/channels`);
+    if (!Array.isArray(data) || !data.length) {
+      chanSel.innerHTML = '<option value="">— No channels found —</option>';
+      status.textContent = 'No channels found in this team.'; status.style.color = '#ffb300'; return;
+    }
+    chanSel.innerHTML = '<option value="">— Select a channel —</option>' +
+      data.map(c => `<option value="${c.id}" data-name="${(c.displayName||'').replace(/"/g,'&quot;')}">${c.displayName}</option>`).join('');
+    status.textContent = `✓ ${data.length} channel(s) loaded.`; status.style.color = '#4ade80';
+  } catch(e) {
+    status.textContent = `✗ ${e.message}`; status.style.color = '#f87171';
+    chanSel.innerHTML = '<option value="">— Error loading channels —</option>';
+  }
 }
 async function wfTestWebhook() {
   const url = document.getElementById('wf-f-webhook-url').value.trim();
@@ -5739,9 +5975,21 @@ function openCreateWorkflowModal() {
   document.getElementById('wf-f-email-emp').value = 'aria';
   document.getElementById('wf-f-email-to').value = '';
   document.getElementById('wf-f-email-subject').value = '';
+  document.getElementById('wf-f-email-cc').value = '';
   document.getElementById('wf-f-teams-emp').value = 'aria';
   document.getElementById('wf-f-teams-webhook').innerHTML = '<option value="">— Loading… —</option>';
   document.getElementById('wf-f-teams-webhook-url').value = '';
+  document.getElementById('wf-f-teams-chat-emp').value = 'aria';
+  document.getElementById('wf-f-teams-chat-id').innerHTML = '<option value="">— click Load Chats first —</option>';
+  document.getElementById('wf-f-teams-chat-name').value = '';
+  document.getElementById('wf-teams-chat-status').textContent = '';
+  document.getElementById('wf-f-teams-channel-team').innerHTML = '<option value="">— Load Teams first —</option>';
+  document.getElementById('wf-f-teams-channel-id').innerHTML = '<option value="">— Select team first —</option>';
+  document.getElementById('wf-f-teams-channel-emp').value = 'aria';
+  document.getElementById('wf-f-teams-channel-team-id').value = '';
+  document.getElementById('wf-teams-channel-status').textContent = '';
+  document.getElementById('wf-f-wa-dm-emp').value = 'aria';
+  document.getElementById('wf-f-wa-dm-jid').value = '';
   document.getElementById('wf-f-active').checked = true;
   document.getElementById('wf-f-cron').value = '0 8 * * *';
   document.getElementById('wf-f-cron').style.display = 'none';
@@ -5788,13 +6036,44 @@ async function openEditWorkflowModal(id) {
   document.getElementById('wf-f-email-emp').value     = ac.emp_id  || 'aria';
   document.getElementById('wf-f-email-to').value      = ac.to      || '';
   document.getElementById('wf-f-email-subject').value = ac.subject  || '';
-  // Restore Teams config
+  document.getElementById('wf-f-email-cc').value      = ac.cc       || '';
+  // Restore Teams webhook config
   document.getElementById('wf-f-teams-emp').value         = ac.emp_id     || 'aria';
   document.getElementById('wf-f-teams-webhook-url').value = ac.webhook_url || '';
   if (ac.webhook_url) {
     document.getElementById('wf-f-teams-webhook').innerHTML =
       `<option value="${ac.webhook_url}">${ac.channel || ac.webhook_url}</option>`;
   }
+  // Restore Teams Chat (Graph) config
+  document.getElementById('wf-f-teams-chat-emp').value = ac.emp_id || 'aria';
+  if (wf.action_type === 'teams_chat' && ac.chat_id) {
+    document.getElementById('wf-f-teams-chat-id').innerHTML =
+      `<option value="${ac.chat_id}" data-name="${(ac.chat_name||ac.chat_id).replace(/"/g,'&quot;')}">${ac.chat_name || ac.chat_id}</option>`;
+    document.getElementById('wf-f-teams-chat-name').value = ac.chat_name || '';
+    document.getElementById('wf-teams-chat-status').textContent = 'Saved chat loaded. Click Load Chats to refresh.';
+  } else {
+    document.getElementById('wf-f-teams-chat-id').innerHTML = '<option value="">— click Load Chats first —</option>';
+    document.getElementById('wf-f-teams-chat-name').value = '';
+    document.getElementById('wf-teams-chat-status').textContent = '';
+  }
+  // Restore Teams Channel (Graph) config
+  document.getElementById('wf-f-teams-channel-emp').value = ac.emp_id || 'aria';
+  if (wf.action_type === 'teams_channel' && ac.team_id && ac.channel_id) {
+    document.getElementById('wf-f-teams-channel-team-id').value = ac.team_id;
+    document.getElementById('wf-f-teams-channel-team').innerHTML =
+      `<option value="${ac.team_id}" data-name="${(ac.team_name||'').replace(/"/g,'&quot;')}">${ac.team_name || ac.team_id}</option>`;
+    document.getElementById('wf-f-teams-channel-id').innerHTML =
+      `<option value="${ac.channel_id}" data-name="${(ac.chan_name||'').replace(/"/g,'&quot;')}">${ac.chan_name || ac.channel_id}</option>`;
+    document.getElementById('wf-teams-channel-status').textContent = 'Saved channel loaded. Click Load Teams to refresh.';
+  } else {
+    document.getElementById('wf-f-teams-channel-team').innerHTML = '<option value="">— Load Teams first —</option>';
+    document.getElementById('wf-f-teams-channel-id').innerHTML = '<option value="">— Select team first —</option>';
+    document.getElementById('wf-f-teams-channel-team-id').value = '';
+    document.getElementById('wf-teams-channel-status').textContent = '';
+  }
+  // Restore WhatsApp DM config
+  document.getElementById('wf-f-wa-dm-emp').value = ac.emp_id  || 'aria';
+  document.getElementById('wf-f-wa-dm-jid').value  = ac.to_jid  || '';
   wfSelectTrigger(wf.trigger_type || 'manual');
   wfSelectEmp(wf.employee_id || 'aria');
   wfSelectAction(wf.action_type || 'log');
@@ -5833,10 +6112,12 @@ async function saveWorkflow() {
   } else if (action_type === 'email') {
     const to = document.getElementById('wf-f-email-to').value.trim();
     if (!to) { showToast('Enter an email recipient.', 'warn'); return; }
+    const cc = document.getElementById('wf-f-email-cc').value.trim();
     action_config = {
       emp_id:  document.getElementById('wf-f-email-emp').value,
       to,
       subject: document.getElementById('wf-f-email-subject').value.trim() || 'NOC Sentinel Workflow Result',
+      ...(cc ? { cc } : {}),
     };
   } else if (action_type === 'teams') {
     const webhookUrl = document.getElementById('wf-f-teams-webhook-url').value;
@@ -5847,6 +6128,38 @@ async function saveWorkflow() {
       emp_id:      document.getElementById('wf-f-teams-emp').value,
       webhook_url: webhookUrl,
       channel:     channelName,
+    };
+  } else if (action_type === 'teams_chat') {
+    const chatSel  = document.getElementById('wf-f-teams-chat-id');
+    const chatId   = chatSel.value;
+    const chatName = chatSel.options[chatSel.selectedIndex]?.dataset?.name || chatSel.options[chatSel.selectedIndex]?.text || chatId;
+    if (!chatId) { showToast('Select a Teams group chat first.', 'warn'); return; }
+    action_config = {
+      emp_id:    document.getElementById('wf-f-teams-chat-emp').value,
+      chat_id:   chatId,
+      chat_name: chatName,
+    };
+  } else if (action_type === 'teams_channel') {
+    const teamSel   = document.getElementById('wf-f-teams-channel-team');
+    const chanSel   = document.getElementById('wf-f-teams-channel-id');
+    const teamId    = document.getElementById('wf-f-teams-channel-team-id').value || teamSel.value;
+    const channelId = chanSel.value;
+    const teamName  = teamSel.options[teamSel.selectedIndex]?.dataset?.name || teamSel.options[teamSel.selectedIndex]?.text || '';
+    const chanName  = chanSel.options[chanSel.selectedIndex]?.dataset?.name || chanSel.options[chanSel.selectedIndex]?.text || '';
+    if (!teamId || !channelId) { showToast('Select a Team and channel first.', 'warn'); return; }
+    action_config = {
+      emp_id:     document.getElementById('wf-f-teams-channel-emp').value,
+      team_id:    teamId,
+      channel_id: channelId,
+      team_name:  teamName,
+      chan_name:  chanName,
+    };
+  } else if (action_type === 'whatsapp_dm') {
+    const jid = document.getElementById('wf-f-wa-dm-jid').value.trim();
+    if (!jid) { showToast('Enter a WhatsApp contact number or JID.', 'warn'); return; }
+    action_config = {
+      emp_id: document.getElementById('wf-f-wa-dm-emp').value,
+      to_jid: jid,
     };
   }
   const body = {
@@ -6278,6 +6591,168 @@ async function m365DeleteWebhook(id) {
   if (!confirm('Remove this Teams webhook?')) return;
   await fetch(`/api/ms365/teams-webhooks/${id}`, { method: 'DELETE', credentials: 'include' });
   loadM365Webhooks();
+}
+
+// ─── Communications Hub ────────────────────────────────────
+let _chubTeamsChatId   = null;
+let _chubTeamsChatName = '';
+let _chubWAJid         = null;
+
+function switchCommsHub(tab) {
+  document.getElementById('chub-panel-teams').style.display = tab === 'teams' ? '' : 'none';
+  document.getElementById('chub-panel-wa').style.display    = tab === 'wa'    ? '' : 'none';
+  const activeStyle   = 'padding:4px 14px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;';
+  const inactiveStyle = 'padding:4px 14px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--muted)';
+  document.getElementById('chub-tab-teams').style.cssText = tab === 'teams'
+    ? activeStyle + 'border:1px solid rgba(98,100,167,0.5);background:rgba(98,100,167,0.2);color:#8b8dcc'
+    : inactiveStyle;
+  document.getElementById('chub-tab-wa').style.cssText = tab === 'wa'
+    ? activeStyle + 'border:1px solid rgba(74,222,128,0.4);background:rgba(74,222,128,0.1);color:#4ade80'
+    : inactiveStyle;
+}
+
+async function commsLoadTeamsChats() {
+  const status = document.getElementById('chub-teams-status');
+  const list   = document.getElementById('chub-teams-list');
+  status.textContent = 'Loading…'; status.style.color = 'var(--muted)';
+  list.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:10px">Loading…</div>';
+  try {
+    const data = await api('/api/ms365/chats');
+    if (!Array.isArray(data) || !data.length) {
+      list.innerHTML = '<div style="font-size:10px;color:#ffb300;padding:10px">No chats found. Check Chat.ReadWrite.All permission.</div>';
+      status.textContent = ''; return;
+    }
+    status.textContent = `${data.length} chats`; status.style.color = '#4ade80';
+    list.innerHTML = data.map(c => `
+      <div onclick="commsOpenTeamsChat('${c.id.replace(/'/g,"\\'")}','${(c.topic||'Chat').replace(/'/g,"\\'")}')"
+           style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s"
+           onmouseover="this.style.background='rgba(98,100,167,0.1)'" onmouseout="this.style.background=''">
+        <div style="font-size:10px;font-weight:600;color:#8b8dcc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.topic || '(Group Chat)'}</div>
+        <div style="font-size:9px;color:var(--muted)">${c.chatType}</div>
+      </div>`).join('');
+  } catch(e) {
+    status.textContent = '✗ ' + e.message; status.style.color = '#f87171';
+    list.innerHTML = `<div style="font-size:10px;color:#f87171;padding:10px">${e.message}</div>`;
+  }
+}
+
+async function commsOpenTeamsChat(chatId, chatName) {
+  _chubTeamsChatId = chatId; _chubTeamsChatName = chatName;
+  const msgs = document.getElementById('chub-teams-msgs');
+  msgs.innerHTML = '<div style="color:var(--muted);font-style:italic">Loading messages…</div>';
+  try {
+    const data = await api(`/api/ms365/chats/${encodeURIComponent(chatId)}/messages`);
+    if (!Array.isArray(data) || !data.length) {
+      msgs.innerHTML = '<div style="color:var(--muted);font-style:italic">No messages.</div>'; return;
+    }
+    msgs.innerHTML = data.slice().reverse().map(m => {
+      const sender = m.from?.user?.displayName || m.from?.application?.displayName || 'System';
+      const ts     = (m.createdDateTime||'').substring(0,16).replace('T',' ');
+      const body   = (m.body?.content||'').replace(/<[^>]*>/g,'').substring(0,200);
+      return `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+          <span style="color:#a855f7;font-weight:600;font-size:9px">${sender}</span>
+          <span style="color:var(--muted);font-size:9px">${ts}</span>
+        </div>
+        <div style="color:var(--text)">${body}</div>
+      </div>`;
+    }).join('');
+    msgs.scrollTop = msgs.scrollHeight;
+  } catch(e) { msgs.innerHTML = `<div style="color:#f87171">${e.message}</div>`; }
+}
+
+async function commsSendTeamsChat() {
+  if (!_chubTeamsChatId) { showToast('Select a chat first.', 'warn'); return; }
+  const inp = document.getElementById('chub-teams-reply');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  const emp = document.getElementById('chub-teams-emp').value;
+  try {
+    const r = await fetch(`/api/ms365/chats/${encodeURIComponent(_chubTeamsChatId)}/send`, {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message: msg, employee_id: emp }),
+    });
+    const d = await r.json();
+    if (d.ok) { inp.value = ''; commsOpenTeamsChat(_chubTeamsChatId, _chubTeamsChatName); }
+    else showToast('✗ ' + (d.detail||d.error||'Send failed'), 'error');
+  } catch(e) { showToast('✗ ' + e.message, 'error'); }
+}
+
+async function commsLoadWAConvos() {
+  const empId  = document.getElementById('chub-wa-emp').value;
+  const status = document.getElementById('chub-wa-status');
+  const list   = document.getElementById('chub-wa-list');
+  status.textContent = 'Loading…'; status.style.color = 'var(--muted)';
+  list.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:10px">Loading…</div>';
+  try {
+    const data = await api(`/api/workflows/wa/conversations/${empId}`);
+    if (data.error) throw new Error(data.error);
+    const convos = Array.isArray(data) ? data : (data.conversations || []);
+    if (!convos.length) {
+      list.innerHTML = '<div style="font-size:10px;color:#ffb300;padding:10px">No conversations yet.</div>';
+      status.textContent = ''; return;
+    }
+    status.textContent = `${convos.length} chats`; status.style.color = '#4ade80';
+    list.innerHTML = convos.map(c => `
+      <div onclick="commsOpenWAConvo('${(c.jid||'').replace(/'/g,"\\'")}','${empId}')"
+           style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer"
+           onmouseover="this.style.background='rgba(74,222,128,0.07)'" onmouseout="this.style.background=''">
+        <div style="font-size:10px;font-weight:600;color:#4ade80;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name || c.jid}</div>
+        <div style="font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.last || ''}</div>
+      </div>`).join('');
+  } catch(e) {
+    status.textContent = '✗ ' + e.message; status.style.color = '#f87171';
+    list.innerHTML = `<div style="font-size:10px;color:#f87171;padding:10px">${e.message}</div>`;
+  }
+}
+
+async function commsOpenWAConvo(jid, empId) {
+  _chubWAJid = jid;
+  const msgs = document.getElementById('chub-wa-msgs');
+  const callEl = document.getElementById('chub-wa-call-link');
+  // generate wa.me call link if JID looks like a phone number
+  const phone = jid.split('@')[0];
+  if (/^\d+$/.test(phone)) {
+    callEl.innerHTML = `<a href="https://wa.me/${phone}" target="_blank" style="color:#4ade80">wa.me/${phone}</a>`;
+  } else { callEl.innerHTML = ''; }
+  msgs.innerHTML = '<div style="color:var(--muted);font-style:italic">Loading…</div>';
+  try {
+    const data = await api(`/api/workflows/wa/conversations/${empId}/${encodeURIComponent(jid)}`);
+    if (data.error) throw new Error(data.error);
+    const messages = Array.isArray(data) ? data : (data.messages || []);
+    if (!messages.length) { msgs.innerHTML = '<div style="color:var(--muted);font-style:italic">No messages.</div>'; return; }
+    msgs.innerHTML = messages.map(m => {
+      const isMe = m.isMe || m.from === 'me';
+      const ts   = m.ts ? new Date(m.ts * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+      const name = m.name || (isMe ? 'Me' : 'Contact');
+      return `<div style="margin-bottom:8px;text-align:${isMe?'right':'left'}">
+        <div style="display:inline-block;max-width:85%;padding:5px 9px;border-radius:8px;background:${isMe?'rgba(0,212,255,0.12)':'rgba(255,255,255,0.05)'};border:1px solid ${isMe?'rgba(0,212,255,0.2)':'rgba(255,255,255,0.08)'}">
+          <div style="font-size:9px;color:${isMe?'var(--cyan)':'#4ade80'};font-weight:600;margin-bottom:2px">${name} ${ts?'· '+ts:''}</div>
+          <div style="color:var(--text);font-size:10px">${m.text||''}</div>
+        </div>
+      </div>`;
+    }).join('');
+    msgs.scrollTop = msgs.scrollHeight;
+  } catch(e) { msgs.innerHTML = `<div style="color:#f87171">${e.message}</div>`; }
+}
+
+async function commsSendWA() {
+  if (!_chubWAJid) { showToast('Select a conversation first.', 'warn'); return; }
+  const emp = document.getElementById('chub-wa-emp').value;
+  const inp = document.getElementById('chub-wa-reply');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  try {
+    const r = await fetch(`/api/workflows/wa/reply/${emp}`, {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ to: _chubWAJid, message: msg }),
+    });
+    const d = await r.json();
+    if (d.ok || d.id) { inp.value = ''; commsOpenWAConvo(_chubWAJid, emp); }
+    else showToast('✗ ' + (d.detail||d.error||'Send failed'), 'error');
+  } catch(e) { showToast('✗ ' + e.message, 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════

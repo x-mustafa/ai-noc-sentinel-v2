@@ -25,7 +25,7 @@ class WorkflowBody(BaseModel):
         "Analyze the current network state and provide a brief status report.",
         max_length=4000,
     )
-    action_type:     Literal["log", "webhook", "zabbix_ack", "email", "teams", "whatsapp_group"] = "log"
+    action_type:     Literal["log", "webhook", "zabbix_ack", "email", "teams", "teams_chat", "teams_channel", "whatsapp_group", "whatsapp_dm"] = "log"
     action_config:   Optional[str] = None
     is_active:       bool = True
 
@@ -277,3 +277,30 @@ async def wa_logout(emp_id: str, session: dict = Depends(require_operator)):
 @router.get("/wa-groups/{emp_id}")
 async def get_wa_groups(emp_id: str, session: dict = Depends(get_session)):
     return await _wa_get(f"/groups/{emp_id}")
+
+
+# ── WhatsApp conversations (DMs + groups with message history) ─────────────────
+
+@router.get("/wa/conversations/{emp_id}")
+async def wa_conversations(emp_id: str, session: dict = Depends(get_session)):
+    """List all tracked conversations (DMs + groups) with last message preview."""
+    return await _wa_get(f"/conversations/{emp_id}")
+
+
+@router.get("/wa/conversations/{emp_id}/{jid:path}")
+async def wa_conversation_messages(
+    emp_id: str, jid: str, session: dict = Depends(get_session)
+):
+    """Get message history for a specific conversation."""
+    return await _wa_get(f"/conversations/{emp_id}/{jid}")
+
+
+class WaReplyBody(BaseModel):
+    to:      str   # JID or phone number
+    message: str
+
+
+@router.post("/wa/reply/{emp_id}")
+async def wa_reply(emp_id: str, body: WaReplyBody, session: dict = Depends(require_operator)):
+    """Manually send a message as an employee (DM or group)."""
+    return await _wa_post(f"/reply/{emp_id}", {"to": body.to, "message": body.message})

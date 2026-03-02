@@ -326,13 +326,16 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
 
     elif action_type == "email":
         from app.services.ms365 import send_email
-        to      = cfg.get("to", "")
+        to_raw  = cfg.get("to", "")
         subject = cfg.get("subject", f"NOC Sentinel — {wf['name']}")
         emp_id  = cfg.get("emp_id", wf.get("employee_id", "aria"))
-        if not to:
+        cc_raw  = cfg.get("cc", "")
+        if not to_raw:
             return "error: no recipient email"
-        result = await send_email(to=to, subject=subject, body=ai_response,
-                                  employee_id=emp_id)
+        to_list = [t.strip() for t in to_raw.split(",") if t.strip()]
+        cc_list = [c.strip() for c in cc_raw.split(",") if c.strip()] if cc_raw else None
+        result = await send_email(to=to_list, subject=subject, body=ai_response,
+                                  employee_id=emp_id, cc=cc_list)
         return f"email: {'sent' if result['ok'] else result.get('error','failed')}"
 
     elif action_type == "teams":
@@ -345,6 +348,45 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
         result = await send_teams_message(webhook_url=webhook_url, message=ai_response,
                                           title=title, employee_id=emp_id)
         return f"teams: {'sent' if result['ok'] else result.get('error','failed')}"
+
+    elif action_type == "teams_chat":
+        from app.services.ms365 import send_to_chat
+        chat_id = cfg.get("chat_id", "")
+        emp_id  = cfg.get("emp_id", wf.get("employee_id", "aria"))
+        if not chat_id:
+            return "error: no Teams chat ID"
+        result = await send_to_chat(chat_id=chat_id, message=ai_response, employee_id=emp_id)
+        return f"teams_chat: {'sent' if result['ok'] else result.get('error','failed')}"
+
+    elif action_type == "teams_channel":
+        from app.services.ms365 import send_to_channel
+        team_id    = cfg.get("team_id", "")
+        channel_id = cfg.get("channel_id", "")
+        emp_id     = cfg.get("emp_id", wf.get("employee_id", "aria"))
+        title      = cfg.get("title", wf["name"])
+        if not team_id or not channel_id:
+            return "error: no Teams team/channel ID"
+        result = await send_to_channel(team_id=team_id, channel_id=channel_id,
+                                       message=ai_response, title=title, employee_id=emp_id)
+        return f"teams_channel: {'sent' if result['ok'] else result.get('error','failed')}"
+
+    elif action_type == "whatsapp_dm":
+        emp_id = cfg.get("emp_id", "aria")
+        to_jid = cfg.get("to_jid", "")
+        if not to_jid:
+            return "error: no WhatsApp JID"
+        import httpx
+        wa_service = "http://localhost:3001"
+        msg = ai_response[:3800] if ai_response else "[No response]"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    f"{wa_service}/send/{emp_id}",
+                    json={"to": to_jid, "message": msg},
+                )
+            return f"whatsapp_dm: HTTP {resp.status_code}"
+        except Exception as e:
+            return f"whatsapp_dm error: {e}"
 
     return f"unknown action: {action_type}"
 

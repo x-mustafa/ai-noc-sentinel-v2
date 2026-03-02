@@ -14,6 +14,13 @@ from app.services.ms365 import (
     mark_as_read,
     reply_to_email,
     test_graph,
+    list_teams,
+    list_team_channels,
+    list_chats,
+    get_chat_messages,
+    send_to_chat,
+    send_to_channel,
+    get_channel_messages,
 )
 from app.database import fetch_all, fetch_one, execute
 
@@ -47,6 +54,17 @@ class SaveTeamsWebhookBody(BaseModel):
     name:        str
     webhook_url: str
     channel:     str = ""
+
+
+class SendChatBody(BaseModel):
+    message:     str
+    employee_id: str = "aria"
+
+
+class SendChannelBody(BaseModel):
+    message:     str
+    title:       str = ""
+    employee_id: str = "aria"
 
 
 # ── Status / Test ──────────────────────────────────────────────────────────────
@@ -153,6 +171,75 @@ async def api_send_email(
         employee_id=body.employee_id,
         html=body.html,
         cc=cc_list,
+    )
+    if not result["ok"]:
+        raise HTTPException(503, result.get("error", "Send failed"))
+    return result
+
+
+# ── Teams Graph API — teams, channels, chats ───────────────────────────────────
+
+@router.get("/teams")
+async def api_list_teams(session: dict = Depends(get_session)):
+    """List all Teams the app has access to. Requires Team.ReadBasic.All."""
+    return await list_teams()
+
+
+@router.get("/teams/{team_id}/channels")
+async def api_list_channels(team_id: str, session: dict = Depends(get_session)):
+    """List channels in a team. Requires Channel.ReadBasic.All."""
+    return await list_team_channels(team_id)
+
+
+@router.get("/teams/{team_id}/channels/{channel_id}/messages")
+async def api_get_channel_messages(
+    team_id: str, channel_id: str, limit: int = 20,
+    session: dict = Depends(get_session),
+):
+    """Get recent channel messages. Requires ChannelMessage.Read.All."""
+    return await get_channel_messages(team_id, channel_id, limit)
+
+
+@router.post("/teams/{team_id}/channels/{channel_id}/send")
+async def api_send_to_channel(
+    team_id: str, channel_id: str,
+    body: SendChannelBody,
+    session: dict = Depends(require_operator),
+):
+    """Send a message to a Teams channel via Graph API. Requires ChannelMessage.Send."""
+    result = await send_to_channel(
+        team_id=team_id, channel_id=channel_id,
+        message=body.message, title=body.title, employee_id=body.employee_id,
+    )
+    if not result["ok"]:
+        raise HTTPException(503, result.get("error", "Send failed"))
+    return result
+
+
+@router.get("/chats")
+async def api_list_chats(limit: int = 50, session: dict = Depends(get_session)):
+    """List group chats the shared mailbox is a member of. Requires Chat.ReadWrite.All."""
+    return await list_chats(limit)
+
+
+@router.get("/chats/{chat_id}/messages")
+async def api_get_chat_messages(
+    chat_id: str, limit: int = 20,
+    session: dict = Depends(get_session),
+):
+    """Get messages from a Teams chat. Requires Chat.ReadWrite.All."""
+    return await get_chat_messages(chat_id, limit)
+
+
+@router.post("/chats/{chat_id}/send")
+async def api_send_to_chat(
+    chat_id: str,
+    body: SendChatBody,
+    session: dict = Depends(require_operator),
+):
+    """Send a message to a Teams group chat via Graph API. Requires Chat.ReadWrite.All."""
+    result = await send_to_chat(
+        chat_id=chat_id, message=body.message, employee_id=body.employee_id,
     )
     if not result["ok"]:
         raise HTTPException(503, result.get("error", "Send failed"))

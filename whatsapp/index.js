@@ -66,6 +66,8 @@ const qrCodes    = {};  // empId -> base64 data URL
 const status     = {};  // empId -> 'disconnected'|'connecting'|'qr'|'connected'
 const phoneNums  = {};  // empId -> phone number string
 const msgLog     = {};  // empId -> last 30 messages [{from, text, reply, ts}]
+// Conversation store: empId -> { jid -> [{from, text, ts, isMe, name}] }
+const conversations = {};
 
 function log(empId, ...args) {
   console.log(`[${new Date().toISOString()}] [${empId.toUpperCase()}]`, ...args);
@@ -93,6 +95,18 @@ function addToLog(empId, from, text, reply) {
   if (!msgLog[empId]) msgLog[empId] = [];
   msgLog[empId].unshift({ from, text, reply, ts: Date.now() });
   if (msgLog[empId].length > 30) msgLog[empId].pop();
+}
+
+function addToConversation(empId, jid, entry) {
+  if (!conversations[empId])      conversations[empId] = {};
+  if (!conversations[empId][jid]) conversations[empId][jid] = [];
+  conversations[empId][jid].push(entry);
+  // Keep last 100 messages per conversation
+  if (conversations[empId][jid].length > 100) conversations[empId][jid].shift();
+}
+
+function getContactName(msg) {
+  return msg.pushName || msg.key?.remoteJid?.split('@')[0] || 'Unknown';
 }
 
 // ── Send intro message to admin number ────────────────────────────────────────
@@ -192,23 +206,36 @@ async function connectEmployee(empId) {
     if (type !== 'notify') return;
 
     for (const msg of messages) {
-      if (msg.key.fromMe) continue;
       if (msg.key.remoteJid === 'status@broadcast') continue;
 
       const from    = msg.key.remoteJid;
       const isGroup = from.endsWith('@g.us');
-      if (isGroup) continue;  // individual chats only (groups receive, not respond)
+      const isMe    = !!msg.key.fromMe;
 
       const text = (
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
         msg.message?.imageMessage?.caption ||
+        msg.message?.videoMessage?.caption ||
         ''
       ).trim();
 
-      if (!text) continue;
+      // Track all messages in conversations (both sent and received)
+      if (text) {
+        addToConversation(empId, from, {
+          from:   isMe ? (phoneNums[empId] || 'me') : from.replace('@s.whatsapp.net','').replace('@g.us',''),
+          name:   isMe ? EMPLOYEES[empId].name : getContactName(msg),
+          text,
+          ts:     msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now(),
+          isMe,
+          isGroup,
+        });
+      }
 
-      log(empId, `Message from ${from}: "${text.substring(0, 80)}"`);
+      // Only auto-reply to incoming individual DMs
+      if (isMe || isGroup || !text) continue;
+
+      log(empId, `DM from ${from}: "${text.substring(0, 80)}"`);
 
       try {
         await sock.readMessages([msg.key]);
@@ -228,6 +255,15 @@ async function connectEmployee(empId) {
         } else {
           await sock.sendMessage(from, { text: reply });
         }
+
+        // Track the AI reply in conversations too
+        addToConversation(empId, from, {
+          from: phoneNums[empId] || 'me',
+          name: EMPLOYEES[empId].name,
+          text: reply,
+          ts:   Date.now(),
+          isMe: true, isGroup: false,
+        });
 
         addToLog(empId, from.replace('@s.whatsapp.net', ''), text, reply.substring(0, 200));
         log(empId, `Replied to ${from}`);
@@ -369,6 +405,73 @@ app.post('/reconnect/:empId', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// GET /conversations/:empId — list all tracked conversations (DMs + groups) with last message
+app.get('/conversations/:empId', (req, res) => {
+  const { empId } = req.params;
+  const convs = conversations[empId] || {};
+  const result = Object.entries(convs).map(([jid, msgs]) => {
+    const last = msgs[msgs.length - 1] || {};
+    return {
+      jid,
+      name:     last.name || jid,
+      isGroup:  jid.endsWith('@g.us'),
+      lastMsg:  last.text ? last.text.substring(0, 100) : '',
+      lastTs:   last.ts || 0,
+      count:    msgs.length,
+      unread:   msgs.filter(m => !m.isMe).length,
+    };
+  }).sort((a, b) => b.lastTs - a.lastTs);
+  res.json(result);
+});
+
+// GET /conversations/:empId/:jid — get messages for a specific conversation
+app.get('/conversations/:empId/:jid', (req, res) => {
+  const { empId } = req.params;
+  const jid = decodeURIComponent(req.params.jid);
+  const msgs = (conversations[empId] || {})[jid] || [];
+  res.json(msgs.slice(-50)); // last 50 messages
+});
+
+// POST /reply/:empId — manually send a message (DM or group) and log it
+app.post('/reply/:empId', async (req, res) => {
+  const { empId } = req.params;
+  const { to, message } = req.body;
+  if (!sessions[empId] || status[empId] !== 'connected') {
+    return res.status(400).json({ error: `${empId} not connected` });
+  }
+  if (!to || !message) {
+    return res.status(400).json({ error: 'to and message are required' });
+  }
+  try {
+    const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+    await sessions[empId].sendMessage(jid, { text: message });
+    // Track in conversation
+    addToConversation(empId, jid, {
+      from:    phoneNums[empId] || 'me',
+      name:    EMPLOYEES[empId].name,
+      text:    message,
+      ts:      Date.now(),
+      isMe:    true,
+      isGroup: jid.endsWith('@g.us'),
+    });
+    res.json({ ok: true, jid });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /call-link/:empId — generate a WhatsApp click-to-call/chat link
+app.post('/call-link/:empId', (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'phone required' });
+  const cleaned = phone.replace(/\D/g, '');
+  res.json({
+    ok: true,
+    wa_link:   `https://wa.me/${cleaned}`,
+    call_link: `https://wa.me/${cleaned}?text=Calling...`,
+  });
 });
 
 // Health check

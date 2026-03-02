@@ -342,6 +342,212 @@ async def reply_to_email(
         return {"ok": False, "error": str(e)}
 
 
+# ── Teams chats & channels via Graph API ──────────────────────────────────────
+
+async def list_teams() -> list[dict]:
+    """List all teams the app can see. Requires Team.ReadBasic.All."""
+    from app.config import settings
+    if not _is_configured():
+        return []
+    try:
+        token = await _get_token()
+        url   = f"{GRAPH}/teams?$select=id,displayName,description&$top=50"
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code != 200:
+            return [{"error": f"Graph {resp.status_code}"}]
+        return [
+            {"id": t["id"], "name": t.get("displayName",""), "description": t.get("description","")}
+            for t in resp.json().get("value", [])
+        ]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+async def list_team_channels(team_id: str) -> list[dict]:
+    """List channels in a team. Requires Channel.ReadBasic.All."""
+    from app.config import settings
+    if not _is_configured():
+        return []
+    try:
+        token = await _get_token()
+        url   = f"{GRAPH}/teams/{team_id}/channels?$select=id,displayName,membershipType"
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code != 200:
+            return [{"error": f"Graph {resp.status_code}"}]
+        return [
+            {"id": ch["id"], "name": ch.get("displayName",""), "type": ch.get("membershipType","standard")}
+            for ch in resp.json().get("value", [])
+        ]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+async def list_chats(limit: int = 50) -> list[dict]:
+    """List group chats and meetings. Requires Chat.ReadWrite.All."""
+    from app.config import settings
+    if not _is_configured():
+        return []
+    try:
+        token = await _get_token()
+        url   = (
+            f"{GRAPH}/users/{settings.ms365_email}/chats"
+            f"?$filter=chatType eq 'group' or chatType eq 'meeting'"
+            f"&$select=id,topic,chatType,lastUpdatedDateTime"
+            f"&$top={limit}&$orderby=lastUpdatedDateTime desc"
+        )
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code != 200:
+            try:
+                err = resp.json().get("error", {})
+                msg = f"{err.get('code','')}: {err.get('message','')}"
+            except Exception:
+                msg = resp.text[:200]
+            return [{"error": f"Graph {resp.status_code} — {msg}"}]
+        return [
+            {
+                "id":       ch["id"],
+                "name":     ch.get("topic") or f"Group Chat ({ch.get('chatType','')})",
+                "type":     ch.get("chatType",""),
+                "updated":  ch.get("lastUpdatedDateTime",""),
+            }
+            for ch in resp.json().get("value", [])
+        ]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+async def get_chat_messages(chat_id: str, limit: int = 20) -> list[dict]:
+    """Get recent messages from a Teams chat. Requires Chat.ReadWrite.All."""
+    from app.config import settings
+    if not _is_configured():
+        return []
+    try:
+        token = await _get_token()
+        url   = (
+            f"{GRAPH}/chats/{chat_id}/messages"
+            f"?$top={limit}"
+            f"&$select=id,from,body,createdDateTime,messageType"
+        )
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code != 200:
+            return [{"error": f"Graph {resp.status_code}"}]
+        msgs = resp.json().get("value", [])
+        return [
+            {
+                "id":      m.get("id",""),
+                "from":    m.get("from",{}).get("user",{}).get("displayName","") or
+                           m.get("from",{}).get("application",{}).get("displayName",""),
+                "body":    m.get("body",{}).get("content",""),
+                "type":    m.get("body",{}).get("contentType","text"),
+                "date":    m.get("createdDateTime",""),
+            }
+            for m in msgs if m.get("messageType","") == "message"
+        ]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+async def send_to_chat(
+    chat_id: str,
+    message: str,
+    employee_id: str = "aria",
+) -> dict:
+    """Send a message to a Teams chat via Graph API. Requires Chat.ReadWrite.All."""
+    from app.config import settings
+    if not _is_configured():
+        return {"ok": False, "error": "M365 not configured"}
+    emp_name = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
+    html_body = message.replace("\n", "<br>") + f"<br><em>— {emp_name} | NOC Sentinel</em>"
+    try:
+        token = await _get_token()
+        url   = f"{GRAPH}/chats/{chat_id}/messages"
+        payload = {"body": {"contentType": "html", "content": html_body}}
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.post(url, json=payload,
+                                headers={"Authorization": f"Bearer {token}",
+                                         "Content-Type": "application/json"})
+        if resp.status_code == 201:
+            logger.info(f"[M365] Sent to chat {chat_id} by {employee_id}")
+            return {"ok": True}
+        try:
+            err = resp.json().get("error", {})
+            msg = f"{err.get('code','')}: {err.get('message','')}"
+        except Exception:
+            msg = resp.text[:200]
+        return {"ok": False, "error": f"Graph {resp.status_code} — {msg}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+async def send_to_channel(
+    team_id: str,
+    channel_id: str,
+    message: str,
+    title: str = "",
+    employee_id: str = "aria",
+) -> dict:
+    """Send a message to a Teams channel via Graph API. Requires ChannelMessage.Send."""
+    from app.config import settings
+    if not _is_configured():
+        return {"ok": False, "error": "M365 not configured"}
+    emp_name = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
+    heading  = f"<h3>{title}</h3>" if title else ""
+    html_body = heading + message.replace("\n", "<br>") + f"<br><em>— {emp_name} | NOC Sentinel</em>"
+    try:
+        token = await _get_token()
+        url   = f"{GRAPH}/teams/{team_id}/channels/{channel_id}/messages"
+        payload = {"body": {"contentType": "html", "content": html_body}}
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.post(url, json=payload,
+                                headers={"Authorization": f"Bearer {token}",
+                                         "Content-Type": "application/json"})
+        if resp.status_code == 201:
+            logger.info(f"[M365] Sent to channel {channel_id} by {employee_id}")
+            return {"ok": True}
+        try:
+            err = resp.json().get("error", {})
+            msg = f"{err.get('code','')}: {err.get('message','')}"
+        except Exception:
+            msg = resp.text[:200]
+        return {"ok": False, "error": f"Graph {resp.status_code} — {msg}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+async def get_channel_messages(team_id: str, channel_id: str, limit: int = 20) -> list[dict]:
+    """Get recent messages from a Teams channel. Requires ChannelMessage.Read.All."""
+    from app.config import settings
+    if not _is_configured():
+        return []
+    try:
+        token = await _get_token()
+        url   = (
+            f"{GRAPH}/teams/{team_id}/channels/{channel_id}/messages"
+            f"?$top={limit}&$select=id,from,body,createdDateTime,messageType"
+        )
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code != 200:
+            return [{"error": f"Graph {resp.status_code}"}]
+        msgs = resp.json().get("value", [])
+        return [
+            {
+                "id":   m.get("id",""),
+                "from": m.get("from",{}).get("user",{}).get("displayName",""),
+                "body": m.get("body",{}).get("content",""),
+                "type": m.get("body",{}).get("contentType","text"),
+                "date": m.get("createdDateTime",""),
+            }
+            for m in msgs if m.get("messageType","") == "message"
+        ]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
 # ── Teams message via incoming webhook ────────────────────────────────────────
 
 async def send_teams_message(
