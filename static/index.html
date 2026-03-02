@@ -7,6 +7,12 @@
 <meta http-equiv="Pragma" content="no-cache">
 <title>Tabadul NOC Sentinel</title>
 <link rel="icon" type="image/png" href="logo.png">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#00d4ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NOC Sentinel">
 <script src="vis-network.min.js"></script>
 <script src="lucide.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -387,6 +393,238 @@ table.alarms-tbl{width:100%;border-collapse:collapse}
 .btn-danger{background:rgba(255,23,68,0.1);border:1px solid rgba(255,23,68,0.25);color:#ff5252}
 .btn-danger:hover{background:rgba(255,23,68,0.2);border-color:rgba(255,23,68,0.45)}
 
+/* ── INCIDENTS PAGE ── */
+#page-incidents{flex-direction:column;overflow:hidden}
+.inc-header{display:flex;align-items:center;gap:10px;padding:10px 18px;background:rgba(10,15,26,0.9);border-bottom:1px solid var(--border);backdrop-filter:blur(10px);flex-shrink:0;flex-wrap:wrap}
+.inc-title{font-size:14px;font-weight:700;color:#e8f0ff;flex:1}
+.inc-table-wrap{flex:1;overflow-y:auto}
+.inc-tbl{width:100%;border-collapse:collapse}
+.inc-tbl th{position:sticky;top:0;background:#07091a;padding:9px 14px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);border-bottom:1px solid var(--border);z-index:1}
+.inc-tbl td{padding:9px 14px;border-bottom:1px solid rgba(24,37,64,0.5);font-size:12px;vertical-align:middle}
+.inc-tbl tr.inc-data-row:hover td{background:rgba(0,212,255,0.025);cursor:pointer}
+.inc-sev-bar{width:4px;min-height:30px;border-radius:2px;display:inline-block}
+.inc-sev-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.inc-status-badge{font-size:10px;padding:2px 8px;border-radius:12px;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.inc-status-open{background:rgba(255,23,68,0.15);color:#ff4466;border:1px solid rgba(255,23,68,0.3)}
+.inc-status-investigating{background:rgba(255,179,0,0.15);color:#ffb300;border:1px solid rgba(255,179,0,0.3)}
+.inc-status-resolved{background:rgba(0,230,118,0.12);color:#00e676;border:1px solid rgba(0,230,118,0.25)}
+.inc-status-closed{background:rgba(90,122,154,0.15);color:var(--muted);border:1px solid var(--border)}
+.inc-empty{padding:60px;text-align:center;color:var(--muted);font-size:13px}
+.inc-create-panel{background:var(--surface);border-top:1px solid var(--border);padding:14px 18px;flex-shrink:0;display:none}
+.inc-create-panel.open{display:block}
+.inc-form-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.inc-inp{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:#dde8f8;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color 0.15s}
+.inc-inp:focus{border-color:var(--cyan)}
+.inc-inp.wide{flex:1;min-width:180px}
+
+/* ── NOC TV MODE ── */
+#tv-mode-overlay{display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#02040a 0%,#040913 60%,#03070f 100%);flex-direction:column;overflow:hidden}
+#tv-mode-overlay.active{display:flex}
+.tv-header{display:flex;align-items:center;justify-content:space-between;padding:12px 28px 10px;border-bottom:1px solid rgba(0,212,255,0.1);background:rgba(0,0,0,0.3);flex-shrink:0}
+.tv-logo-text{font-size:18px;font-weight:700;color:#fff;letter-spacing:2px}
+.tv-logo-sub{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:2px;margin-top:1px}
+.tv-time{font-size:30px;font-weight:700;color:var(--cyan);font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-align:right}
+.tv-date{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;text-align:right;margin-top:2px}
+.tv-close{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--muted);font-size:10px;padding:5px 14px;border-radius:6px;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all 0.15s;margin-left:24px}
+.tv-close:hover{background:rgba(255,23,68,0.15);border-color:rgba(255,23,68,0.4);color:#ff4466}
+.tv-body{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:rgba(0,212,255,0.07);overflow:hidden;min-height:0}
+.tv-panel{background:#030710;padding:18px 22px;overflow:hidden;display:flex;flex-direction:column}
+.tv-panel-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.tv-panel-title::before{content:'';display:inline-block;width:3px;height:14px;background:var(--cyan);border-radius:2px;flex-shrink:0}
+.tv-sev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tv-sev-card{background:rgba(255,255,255,0.025);border-radius:10px;padding:14px 8px;text-align:center;border:1px solid rgba(255,255,255,0.06)}
+.tv-sev-num{font-size:38px;font-weight:700;line-height:1;font-family:'JetBrains Mono',monospace}
+.tv-sev-lbl{font-size:8px;text-transform:uppercase;letter-spacing:1px;margin-top:5px;color:var(--muted)}
+.tv-inc-list,.tv-emp-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+.tv-inc-row,.tv-emp-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);flex-shrink:0}
+.tv-inc-sev-bar{width:4px;border-radius:2px;align-self:stretch;min-height:22px;flex-shrink:0}
+.tv-inc-title{flex:1;font-size:11px;color:#dde8f8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-inc-meta{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.tv-emp-name{font-size:12px;font-weight:600;color:#fff;width:58px;flex-shrink:0}
+.tv-emp-status{flex:1;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-emp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tv-ticker{grid-column:1/-1;background:#02040a;border-top:1px solid rgba(0,212,255,0.1);padding:0;height:32px;flex-shrink:0;display:flex;align-items:center;overflow:hidden}
+.tv-ticker-label{padding:0 14px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--cyan);background:rgba(0,212,255,0.08);height:100%;display:flex;align-items:center;border-right:1px solid rgba(0,212,255,0.14);flex-shrink:0;white-space:nowrap}
+.tv-ticker-track{flex:1;overflow:hidden;height:100%;position:relative}
+.tv-ticker-inner{white-space:nowrap;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text);position:absolute;top:50%;transform:translateY(-50%);will-change:transform}
+.tv-mode-btn{background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);color:var(--cyan);font-size:10px;padding:4px 12px;border-radius:6px;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all 0.15s;white-space:nowrap}
+.tv-mode-btn:hover{background:rgba(0,212,255,0.14);border-color:rgba(0,212,255,0.5)}
+
+/* ── WAR ROOM MODAL ── */
+#warroom-modal{display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.92);backdrop-filter:blur(8px);align-items:center;justify-content:center}
+#warroom-modal.active{display:flex}
+.warroom-dialog{background:linear-gradient(160deg,#060a14 0%,#08111f 100%);border:1px solid rgba(255,23,68,0.3);border-radius:14px;width:min(920px,98vw);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 60px rgba(255,23,68,0.1),0 32px 64px rgba(0,0,0,0.6)}
+.warroom-header{background:linear-gradient(90deg,rgba(255,23,68,0.1) 0%,transparent 60%);border-bottom:1px solid rgba(255,23,68,0.2);padding:14px 18px;display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}
+.warroom-sev-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.warroom-title{font-size:15px;font-weight:700;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.warroom-stopwatch{font-size:20px;font-weight:700;color:var(--red);font-family:'JetBrains Mono',monospace;letter-spacing:2px;flex-shrink:0}
+.warroom-close{background:none;border:1px solid rgba(255,255,255,0.1);color:var(--muted);font-size:13px;width:28px;height:28px;border-radius:6px;cursor:pointer;transition:all 0.15s;flex-shrink:0}
+.warroom-close:hover{background:rgba(255,23,68,0.12);border-color:rgba(255,23,68,0.4);color:#ff4466}
+.warroom-body{display:grid;grid-template-columns:1fr 300px;flex:1;overflow:hidden;min-height:0}
+.warroom-timeline{padding:14px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;border-right:1px solid var(--border)}
+.warroom-sidebar{padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:rgba(0,0,0,0.2)}
+.warroom-section-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:7px}
+.warroom-update{display:flex;gap:9px;align-items:flex-start}
+.warroom-update-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.warroom-update-body{flex:1;padding:6px 10px;border-radius:0 6px 6px 0;border-left:3px solid var(--border2)}
+.warroom-update-meta{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:2px}
+.warroom-update-text{font-size:12px;color:#dde8f8;line-height:1.5}
+.warroom-type-status .warroom-update-body{background:rgba(0,212,255,0.06);border-left-color:var(--cyan)}
+.warroom-type-action .warroom-update-body{background:rgba(255,179,0,0.06);border-left-color:var(--yellow)}
+.warroom-type-escalation .warroom-update-body{background:rgba(255,23,68,0.08);border-left-color:var(--red)}
+.warroom-type-resolution .warroom-update-body{background:rgba(0,230,118,0.06);border-left-color:var(--green)}
+.warroom-type-finding .warroom-update-body{background:rgba(255,255,255,0.02);border-left-color:var(--border2)}
+.warroom-footer{border-top:1px solid var(--border);padding:10px 18px;display:flex;gap:8px;align-items:flex-end;flex-shrink:0}
+.warroom-textarea{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:#fff;font-size:12px;font-family:'Space Grotesk',sans-serif;resize:none;height:50px;outline:none;transition:border-color 0.15s}
+.warroom-textarea:focus{border-color:var(--cyan)}
+.warroom-type-sel{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:5px 8px;font-family:'JetBrains Mono',monospace;outline:none;height:50px}
+.warroom-empty{padding:30px;text-align:center;color:var(--muted);font-size:12px}
+
+/* ── RUNBOOKS PAGE ── */
+#page-runbooks{flex-direction:column;overflow:hidden}
+.rb-header{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.rb-title{font-size:16px;font-weight:700;color:#fff;margin-right:4px}
+.rb-grid{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+.rb-card{background:rgba(9,14,26,0.7);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;transition:all 0.15s;position:relative}
+.rb-card:hover{border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.03)}
+.rb-card-hdr{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.rb-card-title{font-size:13px;font-weight:600;color:#fff;flex:1;min-width:0}
+.rb-status{font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;flex-shrink:0}
+.rb-status-draft{background:rgba(255,179,0,0.15);color:var(--yellow);border:1px solid rgba(255,179,0,0.25)}
+.rb-status-approved{background:rgba(0,230,118,0.12);color:var(--green);border:1px solid rgba(0,230,118,0.25)}
+.rb-status-deprecated{background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--border)}
+.rb-card-meta{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;display:flex;gap:14px;flex-wrap:wrap}
+.rb-card-keywords{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
+.rb-keyword{font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.15);color:var(--cyan);font-family:'JetBrains Mono',monospace}
+.rb-empty{padding:48px;text-align:center;color:var(--muted);font-size:12px}
+/* Runbook modal */
+#rb-modal{display:none;position:fixed;inset:0;z-index:1500;background:rgba(0,0,0,0.88);backdrop-filter:blur(8px);align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
+#rb-modal.active{display:flex}
+.rb-modal-box{background:linear-gradient(160deg,#060a14,#08111f);border:1px solid var(--border2);border-radius:14px;width:min(780px,100%);padding:24px;position:relative}
+.rb-modal-title{font-size:16px;font-weight:700;color:#fff;margin-bottom:18px;display:flex;align-items:center;gap:10px}
+
+/* ── SLA DASHBOARD PAGE ── */
+#page-sla{flex-direction:column;overflow:hidden}
+.sla-header{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.sla-title{font-size:16px;font-weight:700;color:#fff;margin-right:4px}
+.sla-body{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px}
+.sla-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.sla-card{background:rgba(9,14,26,0.7);border:1px solid var(--border);border-radius:12px;padding:16px;transition:border-color 0.15s}
+.sla-card:hover{border-color:rgba(0,212,255,0.3)}
+.sla-card-ok{border-color:rgba(0,230,118,0.2)}
+.sla-card-at_risk{border-color:rgba(255,179,0,0.35)}
+.sla-card-breached{border-color:rgba(255,23,68,0.4)}
+.sla-card-name{font-size:13px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sla-status-badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;font-family:'JetBrains Mono',monospace;text-transform:uppercase}
+.sla-badge-ok{background:rgba(0,230,118,0.12);color:var(--green);border:1px solid rgba(0,230,118,0.25)}
+.sla-badge-at_risk{background:rgba(255,179,0,0.15);color:var(--yellow);border:1px solid rgba(255,179,0,0.3)}
+.sla-badge-breached{background:rgba(255,23,68,0.15);color:var(--red);border:1px solid rgba(255,23,68,0.3)}
+.sla-pct{font-size:36px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1}
+.sla-pct-ok{color:var(--green)}
+.sla-pct-at_risk{color:var(--yellow)}
+.sla-pct-breached{color:var(--red)}
+.sla-bar-wrap{height:5px;background:rgba(255,255,255,0.07);border-radius:3px;margin:10px 0;overflow:hidden}
+.sla-bar-fill{height:100%;border-radius:3px;transition:width 0.6s ease}
+.sla-meta{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;display:flex;gap:14px;flex-wrap:wrap}
+.sla-events-panel{background:rgba(9,14,26,0.7);border:1px solid var(--border);border-radius:12px;padding:16px}
+.sla-events-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px}
+.sla-event-row{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.sla-event-row:last-child{border-bottom:none}
+.sla-event-type{font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;flex-shrink:0}
+.sla-evt-outage_start{background:rgba(255,23,68,0.15);color:var(--red)}
+.sla-evt-outage_end{background:rgba(0,230,118,0.12);color:var(--green)}
+.sla-evt-degraded_start{background:rgba(255,179,0,0.15);color:var(--yellow)}
+.sla-evt-degraded_end{background:rgba(0,212,255,0.1);color:var(--cyan)}
+/* SLA modal */
+#sla-modal{display:none;position:fixed;inset:0;z-index:1500;background:rgba(0,0,0,0.88);backdrop-filter:blur(8px);align-items:center;justify-content:center}
+#sla-modal.active{display:flex}
+.sla-modal-box{background:linear-gradient(160deg,#060a14,#08111f);border:1px solid var(--border2);border-radius:14px;width:min(500px,95vw);padding:24px}
+
+/* ── WORKFLOWS STANDALONE PAGE ── */
+#page-workflows{flex-direction:column;overflow:hidden}
+.wfs-header{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.wfs-title{font-size:16px;font-weight:700;color:#fff;margin-right:4px}
+.wfs-body{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* ══════════════════════════════════════════
+   VOICE CALL SYSTEM
+══════════════════════════════════════════ */
+#vc-overlay{display:none;position:fixed;inset:0;z-index:11000;background:radial-gradient(ellipse at 50% 0%,rgba(0,20,40,0.97) 0%,rgba(2,4,10,0.99) 100%);flex-direction:column;align-items:center;justify-content:center;gap:0}
+#vc-overlay.active{display:flex}
+
+/* Avatar ring */
+.vc-avatar-wrap{position:relative;width:140px;height:140px;margin-bottom:20px;flex-shrink:0}
+.vc-ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--vc-color,#00d4ff);opacity:0;transform:scale(1)}
+.vc-ring-1{animation:vc-ring-pulse 2.4s ease-out infinite}
+.vc-ring-2{animation:vc-ring-pulse 2.4s ease-out 0.8s infinite}
+.vc-ring-3{animation:vc-ring-pulse 2.4s ease-out 1.6s infinite}
+@keyframes vc-ring-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.9);opacity:0}}
+.vc-avatar-circle{position:absolute;inset:10px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(255,255,255,0.08),rgba(0,0,0,0.6));border:2px solid var(--vc-color,#00d4ff);display:flex;align-items:center;justify-content:center;font-size:52px;box-shadow:0 0 40px var(--vc-glow,rgba(0,212,255,0.25)),inset 0 0 30px rgba(0,0,0,0.4)}
+.vc-status-ring{position:absolute;inset:0;border-radius:50%;border:3px solid var(--vc-color,#00d4ff);opacity:0;transition:opacity 0.3s}
+.vc-overlay-speaking .vc-status-ring{opacity:1;animation:vc-status-pulse 1s ease-in-out infinite}
+@keyframes vc-status-pulse{0%,100%{box-shadow:0 0 0 0 var(--vc-glow,rgba(0,212,255,0.5))}50%{box-shadow:0 0 0 12px transparent}}
+.vc-overlay-listening .vc-status-ring{opacity:1;border-color:#ff4444;box-shadow:0 0 20px rgba(255,68,68,0.4)}
+
+/* Name + status */
+.vc-name{font-size:26px;font-weight:800;letter-spacing:2px;color:#fff;text-align:center}
+.vc-role{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:1px;text-align:center;margin-bottom:6px;text-transform:uppercase}
+.vc-status-label{font-size:12px;font-family:'JetBrains Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;min-height:18px;text-align:center;transition:color 0.3s;margin-bottom:16px}
+.vc-status-label.listening{color:#ff4466;animation:vc-blink 1.2s ease-in-out infinite}
+.vc-status-label.speaking{color:var(--vc-color,#00d4ff)}
+.vc-status-label.thinking{color:var(--yellow)}
+@keyframes vc-blink{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* Waveform */
+.vc-waveform{display:flex;align-items:center;justify-content:center;gap:3px;height:40px;margin-bottom:18px}
+.vc-bar{width:4px;border-radius:2px;background:var(--vc-color,#00d4ff);height:4px;transition:height 0.1s;opacity:0.6}
+.vc-overlay-speaking .vc-bar{opacity:1}
+.vc-overlay-speaking .vc-bar:nth-child(1){animation:vc-wave 0.7s ease-in-out infinite 0.0s}
+.vc-overlay-speaking .vc-bar:nth-child(2){animation:vc-wave 0.7s ease-in-out infinite 0.1s}
+.vc-overlay-speaking .vc-bar:nth-child(3){animation:vc-wave 0.7s ease-in-out infinite 0.15s}
+.vc-overlay-speaking .vc-bar:nth-child(4){animation:vc-wave 0.7s ease-in-out infinite 0.05s}
+.vc-overlay-speaking .vc-bar:nth-child(5){animation:vc-wave 0.7s ease-in-out infinite 0.2s}
+.vc-overlay-speaking .vc-bar:nth-child(6){animation:vc-wave 0.7s ease-in-out infinite 0.08s}
+.vc-overlay-speaking .vc-bar:nth-child(7){animation:vc-wave 0.7s ease-in-out infinite 0.17s}
+.vc-overlay-speaking .vc-bar:nth-child(8){animation:vc-wave 0.7s ease-in-out infinite 0.03s}
+.vc-overlay-listening .vc-bar{background:#ff4466}
+.vc-overlay-listening .vc-bar:nth-child(odd){animation:vc-wave-sm 0.5s ease-in-out infinite alternate}
+.vc-overlay-listening .vc-bar:nth-child(even){animation:vc-wave-sm 0.5s ease-in-out infinite 0.25s alternate}
+@keyframes vc-wave{0%,100%{height:4px}50%{height:32px}}
+@keyframes vc-wave-sm{0%{height:4px}100%{height:16px}}
+
+/* Transcript */
+.vc-transcript{width:min(640px,90vw);max-height:200px;overflow-y:auto;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 18px;display:flex;flex-direction:column;gap:10px;margin-bottom:20px;scroll-behavior:smooth}
+.vc-bubble{max-width:85%;padding:8px 14px;border-radius:14px;font-size:13px;line-height:1.5}
+.vc-bubble-ai{align-self:flex-start;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.15);color:#e0eaff;border-radius:4px 14px 14px 14px}
+.vc-bubble-user{align-self:flex-end;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#e0eaff;border-radius:14px 4px 14px 14px}
+.vc-bubble-interim{align-self:flex-end;background:transparent;border:1px dashed rgba(255,255,255,0.15);color:var(--muted);border-radius:14px 4px 14px 14px;font-style:italic}
+
+/* Controls */
+.vc-controls{display:flex;gap:14px;align-items:center;justify-content:center}
+.vc-mic-btn{width:70px;height:70px;border-radius:50%;background:radial-gradient(circle,rgba(255,68,68,0.25),rgba(255,23,68,0.12));border:2px solid #ff1744;color:#ff4466;font-size:26px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;position:relative}
+.vc-mic-btn:hover{background:radial-gradient(circle,rgba(255,68,68,0.4),rgba(255,23,68,0.2));transform:scale(1.06)}
+.vc-mic-btn.active{background:radial-gradient(circle,rgba(255,23,68,0.5),rgba(255,0,0,0.3));border-color:#ff0000;box-shadow:0 0 20px rgba(255,23,68,0.5);animation:vc-mic-pulse 1.5s ease-in-out infinite}
+@keyframes vc-mic-pulse{0%,100%{box-shadow:0 0 20px rgba(255,23,68,0.4)}50%{box-shadow:0 0 35px rgba(255,23,68,0.7)}}
+.vc-end-btn{width:56px;height:56px;border-radius:50%;background:rgba(255,23,68,0.15);border:2px solid rgba(255,23,68,0.5);color:#ff4466;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.vc-end-btn:hover{background:rgba(255,23,68,0.3);transform:scale(1.05)}
+.vc-ctrl-btn{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+.vc-ctrl-btn:hover{background:rgba(255,255,255,0.1);color:#fff}
+.vc-ctrl-btn.active{background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.3);color:var(--cyan)}
+
+/* Auto-read toggle on employee card */
+.emp-voice-btn{background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);color:var(--muted);font-size:12px;padding:3px 8px;border-radius:6px;cursor:pointer;transition:all 0.15s;font-family:'JetBrains Mono',monospace}
+.emp-voice-btn:hover{border-color:rgba(0,212,255,0.4);color:var(--cyan)}
+.emp-voice-btn.on{background:rgba(0,212,255,0.12);border-color:rgba(0,212,255,0.5);color:var(--cyan)}
+.emp-call-btn{background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);color:var(--green);font-size:12px;padding:3px 8px;border-radius:6px;cursor:pointer;transition:all 0.15s}
+.emp-call-btn:hover{background:rgba(0,230,118,0.18);border-color:rgba(0,230,118,0.5);transform:scale(1.04)}
+
+/* Floating voice note button */
+#vn-fab{position:fixed;bottom:24px;right:24px;z-index:5000;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.2));border:1px solid rgba(0,212,255,0.4);color:var(--cyan);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,212,255,0.15);transition:all 0.2s}
+#vn-fab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(0,212,255,0.25)}
+#vn-fab.recording{background:linear-gradient(135deg,rgba(255,23,68,0.3),rgba(255,0,0,0.2));border-color:#ff1744;color:#ff4466;animation:vc-mic-pulse 1.2s ease-in-out infinite}
+#vn-modal{display:none;position:fixed;bottom:90px;right:24px;z-index:5001;background:linear-gradient(160deg,#060a14,#08111f);border:1px solid var(--border2);border-radius:14px;width:320px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.6)}
+#vn-modal.active{display:block}
+
 /* ── LOGIN OVERLAY ── */
 #login-overlay{
   position:fixed;inset:0;z-index:9999;
@@ -571,6 +809,9 @@ table.alarms-tbl{width:100%;border-collapse:collapse}
 .aip-hint{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .aip-link{font-size:9px;color:var(--cyan);text-decoration:none}
 .aip-link:hover{text-decoration:underline}
+.bm-capture-link{display:inline-flex;align-items:center;gap:5px;background:rgba(0,212,255,0.07);border:1.5px dashed rgba(0,212,255,0.4);border-radius:7px;padding:5px 13px;color:var(--cyan);font-size:11px;font-weight:600;cursor:grab;text-decoration:none;user-select:none;font-family:'Space Grotesk',sans-serif;transition:background 0.15s,border-color 0.15s;white-space:nowrap}
+.bm-capture-link:hover{background:rgba(0,212,255,0.14);border-style:solid;color:var(--cyan);text-decoration:none}
+.bm-capture-link:active{cursor:grabbing}
 .ofc-model-sel{background:rgba(9,14,26,0.9);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:#e0eaff;font-size:11px;font-family:'Space Grotesk',sans-serif;outline:none;cursor:pointer}
 
 /* ══════════════════════════════════════════════════════════
@@ -1331,6 +1572,25 @@ select.form-inp option{background:#0d1628}
       <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:6px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.2));border:1px solid rgba(0,212,255,0.25);color:var(--cyan);font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;margin-left:auto">AI</span>
     </div>
 
+    <div class="nav-item" data-page="incidents" onclick="navigate('incidents')">
+      <span class="nav-icon"><i data-lucide="flame" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Incidents</span>
+      <span class="nav-badge hidden" id="incidents-badge">0</span>
+    </div>
+    <div class="nav-item" data-page="runbooks" onclick="navigate('runbooks')">
+      <span class="nav-icon"><i data-lucide="book-open" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Runbooks</span>
+      <span class="nav-badge hidden" id="runbooks-badge">0</span>
+    </div>
+    <div class="nav-item" data-page="sla" onclick="navigate('sla')">
+      <span class="nav-icon"><i data-lucide="shield-check" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">SLA Dashboard</span>
+    </div>
+    <div class="nav-item" data-page="workflows" onclick="navigate('workflows')">
+      <span class="nav-icon"><i data-lucide="git-branch" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Workflows</span>
+    </div>
+
     <!-- EXTERNAL DASHBOARDS -->
     <div class="ext-section-hdr">Dashboards</div>
     <a class="nav-item ext-grafana" href="https://grafana.tabadul.iq/dashboards" target="_blank" rel="noopener noreferrer">
@@ -1390,6 +1650,7 @@ select.form-inp option{background:#0d1628}
     <div class="stat-chip"><div class="stat-dot" style="background:var(--red)"></div><span class="stat-num" id="sc-prob">—</span><span class="stat-lbl">problems</span></div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--yellow)"></div><span class="stat-num" id="sc-alarms">—</span><span class="stat-lbl">alarms</span></div>
     <div class="refresh-info" id="refresh-info">Connecting...</div>
+    <button class="tv-mode-btn" onclick="toggleTvMode()" title="NOC TV Wall Mode — press Escape to exit">📺 TV</button>
     <div class="live-pill"><div class="live-dot"></div>LIVE</div>
   </div>
 
@@ -1571,7 +1832,7 @@ select.form-inp option{background:#0d1628}
       <!-- AI Providers -->
       <div class="settings-card">
         <h3><i data-lucide="bot" style="width:14px;height:14px;color:var(--cyan)"></i> AI Providers</h3>
-        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Configure API keys for AI Employees and map import. Keys are stored securely in the database.</p>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Configure API keys for AI Employees. Each employee can also have their own AI engine — set it in the AI Employees page.</p>
         <div class="ai-provider-grid">
           <!-- Claude -->
           <div class="ai-provider-card" id="aip-claude">
@@ -1595,7 +1856,7 @@ select.form-inp option{background:#0d1628}
             </div>
             <input type="password" class="aip-input" id="aip-openai-key" placeholder="sk-proj-..." autocomplete="off">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <span class="aip-hint">gpt-4o, gpt-4o-mini, o1</span>
+              <span class="aip-hint">gpt-4o, gpt-4o-mini, o1, o3-mini</span>
               <a class="aip-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">Get key ↗</a>
             </div>
           </div>
@@ -1608,7 +1869,7 @@ select.form-inp option{background:#0d1628}
             </div>
             <input type="password" class="aip-input" id="aip-gemini-key" placeholder="AIzaSy..." autocomplete="off">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <span class="aip-hint">gemini-2.0-flash, gemini-1.5-pro</span>
+              <span class="aip-hint">gemini-2.0-flash (free tier!), gemini-1.5-pro</span>
               <a class="aip-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Get key ↗</a>
             </div>
           </div>
@@ -1621,8 +1882,150 @@ select.form-inp option{background:#0d1628}
             </div>
             <input type="password" class="aip-input" id="aip-grok-key" placeholder="xai-..." autocomplete="off">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <span class="aip-hint">grok-2-latest, grok-3</span>
+              <span class="aip-hint">grok-2-latest, grok-3, grok-3-mini</span>
               <a class="aip-link" href="https://console.x.ai/" target="_blank" rel="noopener">Get key ↗</a>
+            </div>
+          </div>
+          <!-- OpenRouter -->
+          <div class="ai-provider-card" id="aip-openrouter">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(124,58,237,0.12)">🔮</div>
+              <div class="aip-name">OpenRouter</div>
+              <span class="aip-badge unset" id="aip-openrouter-badge">NOT SET</span>
+            </div>
+            <input type="password" class="aip-input" id="aip-openrouter-key" placeholder="sk-or-v1-..." autocomplete="off">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="aip-hint">200+ models — some free (llama, gemma...)</span>
+              <a class="aip-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get key ↗</a>
+            </div>
+          </div>
+          <!-- Groq -->
+          <div class="ai-provider-card" id="aip-groq">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(249,115,22,0.12)">⚡</div>
+              <div class="aip-name">Groq <span style="font-size:9px;color:var(--green);font-weight:700">FREE TIER</span></div>
+              <span class="aip-badge unset" id="aip-groq-badge">NOT SET</span>
+            </div>
+            <input type="password" class="aip-input" id="aip-groq-key" placeholder="gsk_..." autocomplete="off">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="aip-hint">llama-3.3-70b-versatile, mixtral-8x7b (ultra fast)</span>
+              <a class="aip-link" href="https://console.groq.com/keys" target="_blank" rel="noopener">Get key ↗</a>
+            </div>
+          </div>
+          <!-- DeepSeek -->
+          <div class="ai-provider-card" id="aip-deepseek">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(14,165,233,0.12)">🌊</div>
+              <div class="aip-name">DeepSeek <span style="font-size:9px;color:var(--yellow);font-weight:700">VERY CHEAP</span></div>
+              <span class="aip-badge unset" id="aip-deepseek-badge">NOT SET</span>
+            </div>
+            <input type="password" class="aip-input" id="aip-deepseek-key" placeholder="sk-..." autocomplete="off">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="aip-hint">deepseek-chat, deepseek-reasoner (R1)</span>
+              <a class="aip-link" href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">Get key ↗</a>
+            </div>
+          </div>
+          <!-- Mistral -->
+          <div class="ai-provider-card" id="aip-mistral">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(239,68,68,0.1)">🌪️</div>
+              <div class="aip-name">Mistral AI <span style="font-size:9px;color:var(--green);font-weight:700">FREE TIER</span></div>
+              <span class="aip-badge unset" id="aip-mistral-badge">NOT SET</span>
+            </div>
+            <input type="password" class="aip-input" id="aip-mistral-key" placeholder="..." autocomplete="off">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="aip-hint">mistral-small-latest, open-mistral-7b (European)</span>
+              <a class="aip-link" href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">Get key ↗</a>
+            </div>
+          </div>
+          <!-- Together.ai -->
+          <div class="ai-provider-card" id="aip-together">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(16,185,129,0.1)">🤝</div>
+              <div class="aip-name">Together.ai</div>
+              <span class="aip-badge unset" id="aip-together-badge">NOT SET</span>
+            </div>
+            <input type="password" class="aip-input" id="aip-together-key" placeholder="..." autocomplete="off">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="aip-hint">Llama-3-70b, Mixtral, Qwen, 100+ models</span>
+              <a class="aip-link" href="https://api.together.ai/settings/api-keys" target="_blank" rel="noopener">Get key ↗</a>
+            </div>
+          </div>
+          <!-- Ollama (local) -->
+          <div class="ai-provider-card" id="aip-ollama">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(34,197,94,0.1)">🦙</div>
+              <div class="aip-name">Ollama <span style="font-size:9px;color:var(--green);font-weight:700">100% FREE LOCAL</span></div>
+              <span class="aip-badge" id="aip-ollama-badge" style="background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3)">LOCAL</span>
+            </div>
+            <input type="text" class="aip-input" id="aip-ollama-url" placeholder="http://localhost:11434" autocomplete="off">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="aip-hint">llama3.2, qwen2.5, mistral, codellama — no key needed</span>
+              <a class="aip-link" href="https://ollama.com/download" target="_blank" rel="noopener">Install ↗</a>
+            </div>
+          </div>
+          <!-- Claude Web (subscription) -->
+          <div class="ai-provider-card" id="aip-claude_web">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(204,153,51,0.15)">🌐</div>
+              <div class="aip-name">Claude Web <span style="font-size:9px;color:#ffb300;font-weight:700">SUBSCRIPTION</span></div>
+              <span class="aip-badge unset" id="aip-claude_web-badge">NOT SET</span>
+            </div>
+            <!-- Bookmarklet connect flow -->
+            <div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:8px;padding:10px;margin:6px 0">
+              <div style="font-size:10px;color:var(--cyan);font-weight:700;margin-bottom:6px">⚡ One-Click Connect</div>
+              <div style="font-size:10px;color:var(--muted);line-height:1.7">
+                <strong style="color:#e0eaff">Step 1:</strong> Drag this button to your browser's Bookmarks Bar:
+              </div>
+              <div style="margin:7px 0">
+                <a id="bm-claude-web" href="#" class="bm-capture-link" draggable="true" title="Drag me to your bookmarks bar!">
+                  📎 Save Claude → NOC
+                </a>
+              </div>
+              <div style="font-size:10px;color:var(--muted);line-height:1.7">
+                <strong style="color:#e0eaff">Step 2:</strong> Go to <a href="https://claude.ai" target="_blank" style="color:var(--cyan)">claude.ai</a>, log in, then click that bookmark. Done!
+              </div>
+            </div>
+            <!-- Manual fallback -->
+            <div style="margin-top:6px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Or paste session token manually:</div>
+              <input type="password" class="aip-input" id="aip-claude-web-session" placeholder="sk-ant-sid... or eyJ... (Clerk JWT)" autocomplete="off">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+              <span class="aip-hint">Uses your Claude Pro subscription — no API charges</span>
+              <a class="aip-link" href="https://claude.ai" target="_blank" rel="noopener">claude.ai ↗</a>
+            </div>
+          </div>
+          <!-- ChatGPT Web (subscription) -->
+          <div class="ai-provider-card" id="aip-chatgpt_web">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(16,163,127,0.15)">💬</div>
+              <div class="aip-name">ChatGPT Web <span style="font-size:9px;color:#10a37f;font-weight:700">SUBSCRIPTION</span></div>
+              <span class="aip-badge unset" id="aip-chatgpt_web-badge">NOT SET</span>
+            </div>
+            <!-- Bookmarklet connect flow -->
+            <div style="background:rgba(16,163,127,0.04);border:1px solid rgba(16,163,127,0.2);border-radius:8px;padding:10px;margin:6px 0">
+              <div style="font-size:10px;color:#10a37f;font-weight:700;margin-bottom:6px">⚡ One-Click Connect</div>
+              <div style="font-size:10px;color:var(--muted);line-height:1.7">
+                <strong style="color:#e0eaff">Step 1:</strong> Drag this button to your browser's Bookmarks Bar:
+              </div>
+              <div style="margin:7px 0">
+                <a id="bm-chatgpt-web" href="#" class="bm-capture-link" style="border-color:rgba(16,163,127,0.4);color:#10a37f" draggable="true" title="Drag me to your bookmarks bar!">
+                  📎 Save ChatGPT → NOC
+                </a>
+              </div>
+              <div style="font-size:10px;color:var(--muted);line-height:1.7">
+                <strong style="color:#e0eaff">Step 2:</strong> Go to <a href="https://chatgpt.com" target="_blank" style="color:#10a37f">chatgpt.com</a>, log in, then click that bookmark. Done!
+              </div>
+            </div>
+            <!-- Manual fallback -->
+            <div style="margin-top:6px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Or paste access token manually:</div>
+              <input type="password" class="aip-input" id="aip-chatgpt-web-token" placeholder="Bearer token..." autocomplete="off">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+              <span class="aip-hint">Uses your ChatGPT Plus subscription — no API charges</span>
+              <a class="aip-link" href="https://chatgpt.com" target="_blank" rel="noopener">chatgpt.com ↗</a>
             </div>
           </div>
         </div>
@@ -1631,14 +2034,20 @@ select.form-inp option{background:#0d1628}
           <label style="font-size:12px;color:var(--text);white-space:nowrap">Default AI for Employees:</label>
           <select id="aip-default-provider" onchange="updateAipModelOptions()" style="background:rgba(9,14,26,0.9);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:#e0eaff;font-size:11px;font-family:'Space Grotesk',sans-serif;outline:none">
             <option value="claude">Claude (Anthropic)</option>
-            <option value="openai">OpenAI GPT</option>
+            <option value="openai">OpenAI GPT / Codex</option>
             <option value="gemini">Google Gemini</option>
             <option value="grok">xAI Grok</option>
+            <option value="openrouter">OpenRouter (200+ models)</option>
+            <option value="groq">Groq (free, ultra-fast)</option>
+            <option value="deepseek">DeepSeek (cheap)</option>
+            <option value="mistral">Mistral AI (free tier)</option>
+            <option value="together">Together.ai</option>
+            <option value="ollama">Ollama (local, free)</option>
+            <option value="claude_web">Claude Web (subscription)</option>
+            <option value="chatgpt_web">ChatGPT Web (subscription)</option>
           </select>
-          <select id="aip-default-model" style="background:rgba(9,14,26,0.9);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:#e0eaff;font-size:11px;font-family:'Space Grotesk',sans-serif;outline:none;flex:1;min-width:160px">
+          <select id="aip-default-model" style="background:rgba(9,14,26,0.9);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:#e0eaff;font-size:11px;font-family:'Space Grotesk',sans-serif;outline:none;flex:1;min-width:200px">
             <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-            <option value="claude-opus-4-6">claude-opus-4-6</option>
-            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
           </select>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1720,6 +2129,36 @@ select.form-inp option{background:#0d1628}
         <div id="ldap-result" style="margin-top:10px;font-size:11px;font-family:'JetBrains Mono',monospace"></div>
       </div>
 
+      <!-- Auto-Incident from Critical Alarms -->
+      <div class="settings-card">
+        <h3 style="display:flex;align-items:center;gap:8px"><i data-lucide="zap" style="width:15px;height:15px;color:var(--yellow)"></i> Auto-Incident Creation</h3>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Automatically create an Incident when a Zabbix alarm reaches or exceeds the selected severity. Prevents duplicate incidents for the same Zabbix event.</p>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--text)">Enable Auto-Incident</label>
+          <label class="toggle-switch"><input type="checkbox" id="auto-inc-enabled"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="ef" style="margin-bottom:12px">
+          <label>Minimum Severity</label>
+          <select id="auto-inc-severity" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%">
+            <option value="3">Average (3+)</option>
+            <option value="4" selected>High (4+)</option>
+            <option value="5">Disaster only (5)</option>
+          </select>
+        </div>
+        <div class="ef" style="margin-bottom:12px">
+          <label>Auto-assign to Employee</label>
+          <select id="auto-inc-assignee" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%">
+            <option value="">— None —</option>
+            <option value="aria">ARIA (Monitoring)</option>
+            <option value="nexus">NEXUS (Infrastructure)</option>
+            <option value="cipher">CIPHER (Security)</option>
+            <option value="vega">VEGA (Reporting)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="saveAutoIncSettings()">Save</button>
+        <div id="auto-inc-result" style="margin-top:10px;font-size:11px;font-family:'JetBrains Mono',monospace"></div>
+      </div>
+
       <!-- Change password -->
       <div class="settings-card">
         <h3>Change Password</h3>
@@ -1786,11 +2225,17 @@ select.form-inp option{background:#0d1628}
     </div>
     <!-- Header Row 2: AI Provider Selector + Navigation Tabs -->
     <div class="office-tab-bar">
-      <select class="ofc-model-sel" id="ofc-provider-sel" onchange="officeUpdateModelSel()" title="AI Provider">
+      <select class="ofc-model-sel" id="ofc-provider-sel" onchange="officeUpdateModelSel()" title="AI Provider (overrides per-employee assignment for this session)">
         <option value="claude">Claude</option>
-        <option value="openai">OpenAI</option>
+        <option value="openai">OpenAI GPT</option>
         <option value="gemini">Gemini</option>
         <option value="grok">Grok</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="groq">Groq (free)</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="mistral">Mistral</option>
+        <option value="together">Together.ai</option>
+        <option value="ollama">Ollama (local)</option>
       </select>
       <select class="ofc-model-sel" id="ofc-model-sel" title="Model">
         <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
@@ -2140,7 +2585,316 @@ select.form-inp option{background:#0d1628}
     </div>
 
   </div>
+
+  <!-- ══ INCIDENTS PAGE ══ -->
+  <div class="page" id="page-incidents">
+    <div class="inc-header">
+      <div class="inc-title">🚨 Incidents</div>
+      <button class="filter-btn active" id="inc-filter-open" onclick="incFilterSet('open',this)">Open</button>
+      <button class="filter-btn" id="inc-filter-investigating" onclick="incFilterSet('investigating',this)">Investigating</button>
+      <button class="filter-btn" id="inc-filter-all" onclick="incFilterSet('all',this)">All Active</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="loadIncidents()" style="margin-left:0">↺ Refresh</button>
+      <button class="tb-btn add" onclick="toggleCreateIncident()">+ New Incident</button>
+    </div>
+
+    <!-- Quick-create form -->
+    <div id="inc-create-panel" class="inc-create-panel">
+      <div class="inc-form-row">
+        <input id="inc-new-title" class="inc-inp wide" placeholder="Incident title (required)..." />
+        <input id="inc-new-host" class="inc-inp" style="width:150px" placeholder="Host (optional)" />
+        <select id="inc-new-sev" class="inc-inp">
+          <option value="5">💀 Disaster</option>
+          <option value="4">🔴 High</option>
+          <option value="3" selected>🟠 Average</option>
+          <option value="2">🟡 Warning</option>
+          <option value="1">🔵 Info</option>
+        </select>
+        <select id="inc-new-owner" class="inc-inp">
+          <option value="aria">ARIA</option>
+          <option value="nexus">NEXUS</option>
+          <option value="cipher">CIPHER</option>
+          <option value="vega">VEGA</option>
+        </select>
+        <button class="btn btn-primary" style="font-size:11px;padding:6px 16px;height:32px" onclick="createIncident()">Create Incident</button>
+        <button class="tb-btn" onclick="toggleCreateIncident()">Cancel</button>
+      </div>
+      <div id="inc-create-result" style="font-size:11px;font-family:'JetBrains Mono',monospace;margin-top:6px"></div>
+    </div>
+
+    <!-- Incidents table -->
+    <div class="inc-table-wrap">
+      <table class="inc-tbl">
+        <thead>
+          <tr>
+            <th style="width:5px;padding:9px 3px"></th>
+            <th style="width:64px">ID</th>
+            <th style="width:90px">Severity</th>
+            <th>Title</th>
+            <th style="width:120px">Host</th>
+            <th style="width:80px">Owner</th>
+            <th style="width:100px">Status</th>
+            <th style="width:90px">Age</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody id="inc-tbody">
+          <tr><td colspan="9" class="inc-empty">Loading incidents…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
+  <!-- ══ RUNBOOKS PAGE ══ -->
+  <div class="page" id="page-runbooks">
+    <div class="rb-header">
+      <div class="rb-title">📖 Runbooks</div>
+      <button class="filter-btn active" id="rb-filter-approved" onclick="rbFilterSet('approved',this)">Approved</button>
+      <button class="filter-btn" id="rb-filter-draft" onclick="rbFilterSet('draft',this)">Draft</button>
+      <button class="filter-btn" id="rb-filter-all" onclick="rbFilterSet('all',this)">All</button>
+      <div class="tb-sep"></div>
+      <input type="text" id="rb-search" placeholder="Search title / keyword…" oninput="rbSearch(this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 12px;color:#e0eaff;font-size:11px;outline:none;width:200px;font-family:'JetBrains Mono',monospace">
+      <div style="flex:1"></div>
+      <button class="tb-btn" onclick="loadRunbooks()" style="margin-left:0">↺ Refresh</button>
+      <button class="btn btn-primary" onclick="openRbModal(null)" style="font-size:11px;padding:5px 14px">+ New Runbook</button>
+    </div>
+    <div class="rb-grid" id="rb-grid">
+      <div class="rb-empty">Loading runbooks…</div>
+    </div>
+  </div>
+
+  <!-- Runbook create/edit modal -->
+  <div id="rb-modal">
+    <div class="rb-modal-box">
+      <div class="rb-modal-title">
+        <span id="rb-modal-heading">New Runbook</span>
+        <div style="flex:1"></div>
+        <button onclick="closeRbModal()" style="background:none;border:1px solid var(--border);color:var(--muted);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:13px">✕</button>
+      </div>
+      <input type="hidden" id="rb-edit-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="ef" style="margin:0;grid-column:1/-1"><label>Title *</label><input type="text" id="rb-title" placeholder="e.g. High CPU Load — Triage SOP" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
+        <div class="ef" style="margin:0"><label>Author (AI Employee)</label>
+          <select id="rb-author" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%">
+            <option value="">— None —</option>
+            <option value="aria">ARIA</option><option value="nexus">NEXUS</option>
+            <option value="cipher">CIPHER</option><option value="vega">VEGA</option>
+          </select>
+        </div>
+        <div class="ef" style="margin:0"><label>Status</label>
+          <select id="rb-status" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%">
+            <option value="draft">Draft</option><option value="approved">Approved</option>
+          </select>
+        </div>
+        <div class="ef" style="margin:0"><label>Trigger Keywords (comma-separated)</label><input type="text" id="rb-keywords" placeholder="cpu, high load, process" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
+        <div class="ef" style="margin:0"><label>Related Hosts (comma-separated)</label><input type="text" id="rb-hosts" placeholder="core-sw-01, firewall-01" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
+        <div class="ef" style="margin:0"><label>Est. MTTR (minutes)</label><input type="number" id="rb-mttr" min="1" placeholder="30" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
+        <div class="ef" style="margin:0;grid-column:1/-1"><label>Trigger Description</label><textarea id="rb-trigger-desc" rows="2" placeholder="Describe what triggers this runbook…" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%;resize:vertical;font-family:'Space Grotesk',sans-serif"></textarea></div>
+        <div class="ef" style="margin:0;grid-column:1/-1"><label>Symptoms</label><textarea id="rb-symptoms" rows="2" placeholder="Observable symptoms…" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%;resize:vertical;font-family:'Space Grotesk',sans-serif"></textarea></div>
+        <div class="ef" style="margin:0;grid-column:1/-1"><label>Diagnosis Steps</label><textarea id="rb-diagnosis" rows="3" placeholder="Step-by-step diagnosis…" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%;resize:vertical;font-family:'Space Grotesk',sans-serif"></textarea></div>
+        <div class="ef" style="margin:0;grid-column:1/-1"><label>Resolution Steps</label><textarea id="rb-resolution" rows="3" placeholder="Step-by-step resolution…" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%;resize:vertical;font-family:'Space Grotesk',sans-serif"></textarea></div>
+        <div class="ef" style="margin:0"><label>Prevention</label><textarea id="rb-prevention" rows="2" placeholder="How to prevent recurrence…" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%;resize:vertical;font-family:'Space Grotesk',sans-serif"></textarea></div>
+        <div class="ef" style="margin:0"><label>Rollback Steps</label><textarea id="rb-rollback" rows="2" placeholder="How to rollback if needed…" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%;resize:vertical;font-family:'Space Grotesk',sans-serif"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary" onclick="saveRunbook()">Save Runbook</button>
+        <button id="rb-approve-btn" class="btn" onclick="approveRunbook()" style="display:none;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.3);color:var(--green)">✓ Approve</button>
+        <button id="rb-deprecate-btn" class="btn btn-ghost" onclick="deprecateRunbook()" style="display:none">Deprecate</button>
+        <div id="rb-modal-result" style="font-size:11px;font-family:'JetBrains Mono',monospace;margin-left:auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SLA DASHBOARD PAGE ══ -->
+  <div class="page" id="page-sla">
+    <div class="sla-header">
+      <div class="sla-title">📊 SLA Dashboard</div>
+      <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace" id="sla-month-label"></div>
+      <div style="flex:1"></div>
+      <button class="tb-btn" onclick="loadSla()" style="margin-left:0">↺ Refresh</button>
+      <button class="btn btn-primary" onclick="openSlaModal('add-service')" style="font-size:11px;padding:5px 14px">+ Add Service</button>
+      <button class="btn" onclick="openSlaModal('log-event')" style="font-size:11px;padding:5px 14px;background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.3);color:var(--yellow)">⚡ Log Event</button>
+    </div>
+    <div class="sla-body">
+      <div class="sla-cards" id="sla-cards">
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:12px">Loading SLA data…</div>
+      </div>
+      <div class="sla-events-panel">
+        <div class="sla-events-title">Recent Events <span id="sla-events-service-label" style="color:var(--muted);font-weight:400;font-size:10px;margin-left:8px">— click a service card to filter</span></div>
+        <div id="sla-events-list">
+          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">No events loaded</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLA modal (add service / log event) -->
+  <div id="sla-modal">
+    <div class="sla-modal-box">
+      <div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:18px;display:flex;align-items:center;gap:10px">
+        <span id="sla-modal-title">Add Service</span>
+        <div style="flex:1"></div>
+        <button onclick="closeSlaModal()" style="background:none;border:1px solid var(--border);color:var(--muted);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:13px">✕</button>
+      </div>
+      <!-- Add service form -->
+      <div id="sla-form-service">
+        <div class="ef"><label>Service Name *</label><input type="text" id="sla-svc-name" placeholder="e.g. Payment Gateway" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
+        <div class="ef"><label>SLA Target (%)</label><input type="number" id="sla-svc-target" value="99.9" min="0" max="100" step="0.01" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
+        <button class="btn btn-primary" onclick="saveSlaService()">Save Service</button>
+      </div>
+      <!-- Log event form -->
+      <div id="sla-form-event" style="display:none">
+        <div class="ef"><label>Service *</label><select id="sla-evt-service" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"><option value="">— Select —</option></select></div>
+        <div class="ef"><label>Event Type *</label>
+          <select id="sla-evt-type" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%">
+            <option value="outage_start">Outage Start</option>
+            <option value="outage_end">Outage End</option>
+            <option value="degraded_start">Degraded Start</option>
+            <option value="degraded_end">Degraded End</option>
+          </select>
+        </div>
+        <div class="ef"><label>Note (optional)</label><input type="text" id="sla-evt-note" placeholder="Brief description…" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
+        <button class="btn btn-primary" onclick="saveSlaEvent()">Log Event</button>
+      </div>
+      <div id="sla-modal-result" style="margin-top:10px;font-size:11px;font-family:'JetBrains Mono',monospace"></div>
+    </div>
+  </div>
+
+  <!-- ══ WORKFLOWS STANDALONE PAGE ══ -->
+  <div class="page" id="page-workflows">
+    <div class="wfs-header">
+      <div class="wfs-title">⚙️ Workflows</div>
+      <button class="filter-btn active" id="wf-filter-all" onclick="wfsFilterSet('all',this)">All</button>
+      <button class="filter-btn" id="wf-filter-active" onclick="wfsFilterSet('active',this)">Active</button>
+      <button class="filter-btn" id="wf-filter-alarm" onclick="wfsFilterSet('alarm',this)">Alarm Triggers</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="loadWfs()" style="margin-left:0">↺ Refresh</button>
+      <button class="btn btn-primary" onclick="openCreateWorkflowModal()" style="font-size:11px;padding:5px 14px">+ New Workflow</button>
+    </div>
+    <div class="wfs-body">
+      <div class="workflows-grid" id="wfs-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--muted);font-size:12px">Loading workflows…</div>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /main-area -->
+
+<!-- ══ NOC TV MODE OVERLAY ══ -->
+<div id="tv-mode-overlay">
+  <div class="tv-header">
+    <div>
+      <div class="tv-logo-text">TABADUL NOC SENTINEL</div>
+      <div class="tv-logo-sub">NETWORK OPERATIONS CENTER — LIVE VIEW</div>
+    </div>
+    <div style="flex:1"></div>
+    <div>
+      <div class="tv-time" id="tv-clock">00:00:00</div>
+      <div class="tv-date" id="tv-date"></div>
+    </div>
+    <button class="tv-close" onclick="toggleTvMode()">✕ EXIT (ESC)</button>
+  </div>
+  <div class="tv-body" id="tv-body">
+    <!-- Panel 1: Alarm severity breakdown -->
+    <div class="tv-panel" id="tv-panel-alarms">
+      <div class="tv-panel-title">Active Alarms</div>
+      <div class="tv-sev-grid" id="tv-sev-grid">
+        <div class="tv-sev-card"><div class="tv-sev-num" id="tv-sev5" style="color:var(--sev5)">—</div><div class="tv-sev-lbl">Disaster</div></div>
+        <div class="tv-sev-card"><div class="tv-sev-num" id="tv-sev4" style="color:var(--sev4)">—</div><div class="tv-sev-lbl">High</div></div>
+        <div class="tv-sev-card"><div class="tv-sev-num" id="tv-sev3" style="color:var(--sev3)">—</div><div class="tv-sev-lbl">Average</div></div>
+        <div class="tv-sev-card"><div class="tv-sev-num" id="tv-sev2" style="color:var(--sev2)">—</div><div class="tv-sev-lbl">Warning</div></div>
+        <div class="tv-sev-card"><div class="tv-sev-num" id="tv-sev1" style="color:var(--sev1)">—</div><div class="tv-sev-lbl">Info</div></div>
+        <div class="tv-sev-card"><div class="tv-sev-num" id="tv-total" style="color:#fff">—</div><div class="tv-sev-lbl">Total</div></div>
+      </div>
+    </div>
+    <!-- Panel 2: Open incidents -->
+    <div class="tv-panel" id="tv-panel-incidents">
+      <div class="tv-panel-title">Open Incidents</div>
+      <div class="tv-inc-list" id="tv-inc-list">
+        <div style="color:var(--muted);font-size:11px;text-align:center;padding:20px">Loading…</div>
+      </div>
+    </div>
+    <!-- Panel 3: AI Employees -->
+    <div class="tv-panel" id="tv-panel-employees">
+      <div class="tv-panel-title">AI Employee Status</div>
+      <div class="tv-emp-list" id="tv-emp-list">
+        <div style="color:var(--muted);font-size:11px;text-align:center;padding:20px">Loading…</div>
+      </div>
+    </div>
+    <!-- Bottom ticker -->
+    <div class="tv-ticker" id="tv-ticker">
+      <div class="tv-ticker-label">LIVE EVENTS</div>
+      <div class="tv-ticker-track">
+        <div class="tv-ticker-inner" id="tv-ticker-inner">Loading recent events…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ WAR ROOM MODAL ══ -->
+<div id="warroom-modal">
+  <div class="warroom-dialog">
+    <div class="warroom-header">
+      <span class="warroom-sev-badge" id="wr-sev-badge">SEV</span>
+      <div style="display:flex;flex-direction:column;min-width:0;flex:1">
+        <div class="warroom-title" id="wr-title">Incident</div>
+        <div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px" id="wr-meta"></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="warroom-stopwatch" id="wr-stopwatch">00:00:00</div>
+        <div style="font-size:8px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">ELAPSED TIME</div>
+      </div>
+      <button class="warroom-close" onclick="closeWarRoom()">✕</button>
+    </div>
+    <div class="warroom-body">
+      <!-- Timeline -->
+      <div class="warroom-timeline">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Timeline</div>
+        <div id="wr-timeline">
+          <div class="warroom-empty">No updates yet — add the first update below.</div>
+        </div>
+      </div>
+      <!-- Sidebar -->
+      <div class="warroom-sidebar">
+        <!-- Status actions -->
+        <div>
+          <div class="warroom-section-title">Change Status</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <button class="tb-btn" style="text-align:left;font-size:10px" onclick="warRoomSetStatus('investigating')">🔍 Mark Investigating</button>
+            <button class="tb-btn" style="text-align:left;font-size:10px" onclick="warRoomSetStatus('resolved')">✓ Mark Resolved</button>
+            <button class="tb-btn" style="text-align:left;font-size:10px" onclick="warRoomSetStatus('closed')">🔒 Close Incident</button>
+          </div>
+        </div>
+        <!-- Broadcast -->
+        <div>
+          <div class="warroom-section-title">Broadcast Update</div>
+          <textarea class="warroom-textarea" id="wr-broadcast-msg" placeholder="Type broadcast message (sends to Teams + WhatsApp)..." style="width:100%;height:80px"></textarea>
+          <button class="btn btn-primary" style="font-size:10px;padding:5px 14px;margin-top:6px;width:100%" onclick="warRoomBroadcast()">📡 Broadcast Now</button>
+          <div id="wr-broadcast-result" style="font-size:10px;font-family:'JetBrains Mono',monospace;margin-top:5px"></div>
+        </div>
+        <!-- Ask AI -->
+        <div>
+          <div class="warroom-section-title">Ask AI Employee</div>
+          <button class="tb-btn" style="font-size:10px;width:100%;text-align:left" onclick="warRoomAskUpdate()">🤖 Request Status Update</button>
+          <div id="wr-ai-result" style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:5px"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Footer: add update -->
+    <div class="warroom-footer">
+      <select class="warroom-type-sel" id="wr-update-type">
+        <option value="finding">Finding</option>
+        <option value="action">Action</option>
+        <option value="status">Status</option>
+        <option value="escalation">Escalation</option>
+        <option value="resolution">Resolution</option>
+      </select>
+      <textarea class="warroom-textarea" id="wr-update-text" placeholder="Add update to timeline..." onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();warRoomAddUpdate()}"></textarea>
+      <button class="btn btn-primary" style="height:50px;padding:0 16px;font-size:11px;white-space:nowrap" onclick="warRoomAddUpdate()">Post Update</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ FEEDBACK MODAL ══ -->
 <div id="feedback-modal" class="feedback-modal-overlay">
@@ -2198,6 +2952,22 @@ select.form-inp option{background:#0d1628}
       <button class="instr-save-btn" onclick="saveEmployeeInstructions()">Save Instructions</button>
       <button class="instr-reset-btn" onclick="resetEmployeeInstructions()">Reset to Defaults</button>
       <span id="instr-status" class="instr-status"></span>
+    </div>
+
+    <!-- AI Engine section -->
+    <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:14px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--cyan);margin-bottom:10px">⚡ AI Engine</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">Assign a specific AI provider/model to this employee. Overrides the global default.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="emp-instr-ai-provider" onchange="empInstrUpdateModelSel()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:#e0eaff;font-size:11px;font-family:'Space Grotesk',sans-serif;outline:none;min-width:160px">
+          <option value="">— Use global default —</option>
+        </select>
+        <select id="emp-instr-ai-model" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:#e0eaff;font-size:11px;font-family:'Space Grotesk',sans-serif;outline:none;flex:1;min-width:160px">
+          <option value="">— Model —</option>
+        </select>
+        <button onclick="saveInstrEmpAiModel()" style="background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:var(--cyan);padding:5px 14px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap">Save AI Engine</button>
+      </div>
+      <div id="emp-instr-ai-result" style="font-size:11px;font-family:'JetBrains Mono',monospace;margin-top:6px;color:var(--muted)"></div>
     </div>
   </div>
 </div>
@@ -3803,6 +4573,7 @@ async function refreshAlarms(){
   const probs=await api('/api/zabbix/problems'+(params.length?'?'+params.join('&'):''))||[];
   S.allProblems=probs;
   renderAlarms();
+  autoIncidentCheck(probs);
 }
 
 function filterAlarms(sev,btn){
@@ -3980,8 +4751,12 @@ async function loadSettingsData(){
   }
   // Load AI provider keys
   await loadAiKeys();
+  // Init bookmarklet hrefs with current server origin
+  initWebSessionBookmarklets();
   // Load MS365 config
   await loadM365Config();
+  // Load auto-incident settings
+  loadAutoIncSettings();
 }
 
 // ── USER MANAGEMENT ────────────────────────────────────────
@@ -4378,19 +5153,23 @@ async function doCreateMap(){
 // ═══════════════════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════════════════
-const PAGE_TITLES={map:'Network Map',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office'};
+const PAGE_TITLES={map:'Network Map',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office',incidents:'Incidents',runbooks:'Runbooks',sla:'SLA Dashboard',workflows:'Workflows'};
 function navigate(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.classList.toggle('active',n.dataset.page===page));
   document.getElementById('page-title').textContent=PAGE_TITLES[page]||page;
-  if(page==='alarms')   refreshAlarms();
-  if(page==='hosts')    renderHosts();
-  if(page==='settings') loadSettingsData();
-  if(page==='intel')    initIntelPage();
-  if(page==='map')      setTimeout(()=>visNetwork.fit({animation:{duration:400}}),50);
-  if(page==='hreality') renderHRealityPage();
-  if(page==='office')   { renderOfficePage(); updateOfficeHealthPct(); setTimeout(loadEmployeeTypeBadges, 800); }
+  if(page==='alarms')    refreshAlarms();
+  if(page==='hosts')     renderHosts();
+  if(page==='settings')  loadSettingsData();
+  if(page==='intel')     initIntelPage();
+  if(page==='map')       setTimeout(()=>visNetwork.fit({animation:{duration:400}}),50);
+  if(page==='hreality')  renderHRealityPage();
+  if(page==='office')    { renderOfficePage(); updateOfficeHealthPct(); setTimeout(loadEmployeeTypeBadges, 800); }
+  if(page==='incidents') loadIncidents();
+  if(page==='runbooks')  loadRunbooks();
+  if(page==='sla')       loadSla();
+  if(page==='workflows') loadWfs();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5698,10 +6477,56 @@ async function openInstrModal(empId) {
     document.getElementById('instr-communication').value = data.instruction_communication || '';
     document.getElementById('instr-constraints').value   = data.instruction_constraints   || '';
   }
+
+  // Load AI engine for this employee
+  const provSel = document.getElementById('emp-instr-ai-provider');
+  const modSel  = document.getElementById('emp-instr-ai-model');
+  if (provSel) {
+    // Build provider options with blank "global default" option
+    provSel.innerHTML = '<option value="">— Use global default —</option>' +
+      Object.entries(_PROVIDER_LABELS).map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+    const aiData = await api(`/api/employees/${empId}/ai-model`);
+    if (aiData) {
+      provSel.value = aiData.provider_override || '';
+      empInstrUpdateModelSel();
+      if (modSel && aiData.model_override) modSel.value = aiData.model_override;
+      const resEl = document.getElementById('emp-instr-ai-result');
+      if (resEl) resEl.textContent = `Effective: ${aiData.effective_provider} / ${aiData.effective_model}`;
+    }
+  }
 }
 
 function closeInstrModal() {
   document.getElementById('instr-modal').classList.remove('open');
+}
+
+function empInstrUpdateModelSel() {
+  const provSel = document.getElementById('emp-instr-ai-provider');
+  const modSel  = document.getElementById('emp-instr-ai-model');
+  if (!provSel || !modSel) return;
+  const prov = provSel.value;
+  if (!prov) { modSel.innerHTML = '<option value="">— Model (uses global default) —</option>'; return; }
+  const opts = _ALL_MODELS[prov] || [];
+  modSel.innerHTML = opts.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+async function saveInstrEmpAiModel() {
+  const provSel = document.getElementById('emp-instr-ai-provider');
+  const modSel  = document.getElementById('emp-instr-ai-model');
+  const resEl   = document.getElementById('emp-instr-ai-result');
+  if (!_instrEmpId) return;
+  const provider = provSel?.value || '';
+  const model    = (provider && modSel?.value) ? modSel.value : '';
+  if (resEl) { resEl.style.color='var(--muted)'; resEl.textContent='Saving…'; }
+  const r = await api(`/api/employees/${_instrEmpId}/ai-model`, {
+    method:'PATCH', body:JSON.stringify({provider, model}),
+  });
+  if (r?.ok) {
+    const label = provider ? `${r.provider} / ${r.model}` : 'Using global default';
+    if (resEl) { resEl.style.color='#00e676'; resEl.textContent=`✓ ${label}`; }
+  } else {
+    if (resEl) { resEl.style.color='#ff4444'; resEl.textContent='Save failed'; }
+  }
 }
 
 async function loadTypeInstructions(typeKey) {
@@ -7371,6 +8196,8 @@ function _buildEmpCard(e) {
     <button onclick="switchOfficeTabAndShowHistory('${e.id}')" class="emp-btn" style="--btn-color:${e.color}" title="View activity history">📋</button>
     <button onclick="document.getElementById('emp-${e.id}-file-input').click()" class="emp-btn" style="--btn-color:${e.color}" title="Attach files (images, PDF, DOCX, PPTX)">📎</button>
     <button onclick="officeStopTask('${e.id}')" class="emp-btn emp-btn-stop" id="emp-${e.id}-stop" style="display:none">■ Stop</button>
+    <button onclick="vcStartCall('${e.id}')" class="emp-call-btn" title="Voice call ${e.name}">📞 Call</button>
+    <button onclick="vcToggleAutoReadEmp('${e.id}',this)" class="emp-voice-btn" id="emp-${e.id}-autoread" title="Auto-read responses aloud">🔈</button>
   </div>
 </div>`;
 }
@@ -7572,6 +8399,11 @@ async function _finishEmpTask(empId, emp, output, taskType='custom') {
   }
 
   _addFeedItem(empId, `Task completed`, emp.color);
+
+  // Auto-read: speak response aloud if per-employee auto-read is enabled
+  if (output && output.length > 5 && typeof VC !== 'undefined') {
+    VC.speakResponse(empId, output.slice(0, 800)); // limit to first ~800 chars
+  }
 
   // Auto-collab: if toggle is ON, ask AI if cross-team discussion is needed
   if (OFFICE_STATE.autoCollabEnabled && output.length > 100) {
@@ -7821,33 +8653,117 @@ function _renderAssignFiles() {
   }).join('');
 }
 
-// ── OFFICE MODEL SELECTOR ────────────────────────────────────────────────────
-const _MODEL_OPTS = {
-  claude: ['claude-sonnet-4-6','claude-opus-4-6','claude-haiku-4-5-20251001'],
-  openai: ['gpt-4o','gpt-4o-mini','o1','o1-mini'],
-  gemini: ['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],
-  grok:   ['grok-2-latest','grok-3','grok-3-mini'],
+// ── ALL PROVIDERS MODEL LISTS ─────────────────────────────────────────────────
+const _ALL_MODELS = {
+  claude:      ['claude-sonnet-4-6','claude-opus-4-6','claude-haiku-4-5-20251001'],
+  openai:      ['gpt-4o','gpt-4o-mini','o1','o1-mini','o3-mini'],
+  gemini:      ['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],
+  grok:        ['grok-2-latest','grok-3','grok-3-mini'],
+  openrouter:  ['anthropic/claude-3.5-sonnet','openai/gpt-4o','google/gemini-2.0-flash','meta-llama/llama-3.3-70b-instruct:free','mistralai/mistral-7b-instruct:free'],
+  groq:        ['llama-3.3-70b-versatile','llama-3.1-70b-versatile','mixtral-8x7b-32768','gemma2-9b-it','llama3-70b-8192'],
+  deepseek:    ['deepseek-chat','deepseek-reasoner'],
+  mistral:     ['mistral-small-latest','mistral-large-latest','open-mistral-7b','open-mixtral-8x7b'],
+  together:    ['meta-llama/Llama-3-70b-chat-hf','mistralai/Mixtral-8x7B-Instruct-v0.1','Qwen/Qwen2.5-72B-Instruct-Turbo'],
+  ollama:      ['llama3.2','llama3.1','qwen2.5','mistral','codellama','phi3','gemma2:9b','llava'],
+  claude_web:  ['claude-3-5-sonnet-20241022','claude-3-7-sonnet-20250219','claude-3-opus-20240229'],
+  chatgpt_web: ['gpt-4o','gpt-4o-mini','o1','o1-mini','o3-mini'],
 };
+
+const _PROVIDER_LABELS = {
+  claude:'Claude (Anthropic)', openai:'OpenAI GPT/Codex', gemini:'Google Gemini',
+  grok:'xAI Grok', openrouter:'OpenRouter', groq:'Groq (free)', deepseek:'DeepSeek',
+  mistral:'Mistral AI', together:'Together.ai', ollama:'Ollama (local)',
+  claude_web:'Claude Web (subscription)', chatgpt_web:'ChatGPT Web (subscription)',
+};
+
+function _providerSelectHtml(selected='') {
+  return Object.entries(_PROVIDER_LABELS).map(([v,l]) =>
+    `<option value="${v}"${v===selected?' selected':''}>${l}</option>`).join('');
+}
+
+// ── OFFICE MODEL SELECTOR ────────────────────────────────────────────────────
+const _MODEL_OPTS = _ALL_MODELS; // alias for backwards compat
 function officeUpdateModelSel() {
   const prov = document.getElementById('ofc-provider-sel')?.value || 'claude';
   const sel  = document.getElementById('ofc-model-sel');
   if (!sel) return;
-  const opts = _MODEL_OPTS[prov] || _MODEL_OPTS.claude;
+  const opts = _ALL_MODELS[prov] || _ALL_MODELS.claude;
   sel.innerHTML = opts.map(m=>`<option value="${m}">${m}</option>`).join('');
 }
 
+// Populate provider select options for office panel if it still has only 4 options
+(function patchOfficeProviderSel() {
+  const sel = document.getElementById('ofc-provider-sel');
+  if (sel && sel.options.length <= 4) {
+    sel.innerHTML = _providerSelectHtml('claude');
+  }
+})();
+
+// ── WEB SESSION BOOKMARKLETS ──────────────────────────────────────────────────
+function initWebSessionBookmarklets() {
+  const base = window.location.origin;
+
+  // Claude.ai bookmarklet — uses window.Clerk.session.getToken() (Clerk JWT)
+  // sessionKey is HttpOnly and cannot be read via JS — Clerk JWT works as Bearer token
+  const claudeJs = [
+    '(function(){',
+    'function openCapture(t){',
+    '  window.open("' + base + '/api/import/capture-web-session?provider=claude_web&token="+encodeURIComponent(t),"_noc_cap","width=440,height=280,scrollbars=no,resizable=no");',
+    '}',
+    'if(window.Clerk&&window.Clerk.session){',
+    '  window.Clerk.session.getToken().then(function(t){',
+    '    if(t){openCapture(t);}',
+    '    else{alert("Could not get session token.\\nTry logging out and back in to claude.ai.");}',
+    '  }).catch(function(e){alert("Clerk error: "+e.message);});',
+    '} else if(window.__clerk_db_jwt){',
+    '  openCapture(window.__clerk_db_jwt);',
+    '} else {',
+    '  alert("Could not find Clerk session.\\nMake sure you are logged in to claude.ai and try again.");',
+    '}',
+    '})();',
+  ].join('');
+
+  const claudeBm = document.getElementById('bm-claude-web');
+  if (claudeBm) claudeBm.href = 'javascript:' + claudeJs;
+
+  // ChatGPT bookmarklet — fetches /api/auth/session to get accessToken
+  const cgJs = [
+    '(function(){',
+    'fetch("/api/auth/session").then(function(r){return r.json()}).then(function(d){',
+    '  var t=d.accessToken;',
+    '  if(t){',
+    '    window.open("' + base + '/api/import/capture-web-session?provider=chatgpt_web&token="+encodeURIComponent(t),"_noc_cap","width=440,height=280,scrollbars=no,resizable=no");',
+    '  } else {',
+    '    alert("Access token not found.\\nMake sure you are logged in to ChatGPT Plus.");',
+    '  }',
+    '}).catch(function(e){alert("Error: " + e.message + "\\nMake sure you are on chatgpt.com.");});',
+    '})();',
+  ].join('');
+
+  const cgBm = document.getElementById('bm-chatgpt-web');
+  if (cgBm) cgBm.href = 'javascript:' + cgJs;
+}
+
+// Listen for postMessage from the bookmarklet capture popup
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'noc_web_session_saved') {
+    loadAiKeys(); // refresh badges
+    const provider = e.data.provider || '';
+    const label = provider === 'claude_web' ? 'Claude.ai' : provider === 'chatgpt_web' ? 'ChatGPT' : '';
+    if (label) {
+      const res = document.getElementById('aip-result');
+      if (res) { res.style.color = '#00e676'; res.textContent = '✓ ' + label + ' session connected'; setTimeout(() => res.textContent = '', 4000); }
+    }
+  }
+});
+
 // ── AI PROVIDER SETTINGS ─────────────────────────────────────────────────────
-const _AIP_MODELS = {
-  claude: ['claude-sonnet-4-6','claude-opus-4-6','claude-haiku-4-5-20251001'],
-  openai: ['gpt-4o','gpt-4o-mini','o1'],
-  gemini: ['gemini-2.0-flash','gemini-1.5-pro'],
-  grok:   ['grok-2-latest','grok-3'],
-};
+const _AIP_MODELS = _ALL_MODELS; // alias
 function updateAipModelOptions() {
   const prov = document.getElementById('aip-default-provider')?.value || 'claude';
   const sel  = document.getElementById('aip-default-model');
   if (!sel) return;
-  const opts = _AIP_MODELS[prov] || _AIP_MODELS.claude;
+  const opts = _ALL_MODELS[prov] || _ALL_MODELS.claude;
   sel.innerHTML = opts.map(m=>`<option value="${m}">${m}</option>`).join('');
 }
 
@@ -7855,15 +8771,38 @@ async function loadAiKeys() {
   const r = await api('/api/import/aikeys');
   if (!r) return;
   const badge = (id, has) => {
-    const el = document.getElementById(`aip-${id}-badge`);
+    const el   = document.getElementById(`aip-${id}-badge`);
     const card = document.getElementById(`aip-${id}`);
-    if (el) { el.textContent = has ? 'SET ✓' : 'NOT SET'; el.className = 'aip-badge ' + (has?'set':'unset'); }
+    if (el && el.className !== 'aip-badge') { // don't overwrite the LOCAL ollama badge
+      el.textContent = has ? 'SET ✓' : 'NOT SET';
+      el.className   = 'aip-badge ' + (has ? 'set' : 'unset');
+    }
     if (card) card.classList.toggle('has-key', has);
   };
-  badge('claude', r.claude?.has);
-  badge('openai', r.openai?.has);
-  badge('gemini', r.gemini?.has);
-  badge('grok',   r.grok?.has);
+  badge('claude',     r.claude?.has);
+  badge('openai',     r.openai?.has);
+  badge('gemini',     r.gemini?.has);
+  badge('grok',       r.grok?.has);
+  badge('openrouter', r.openrouter?.has);
+  badge('groq',       r.groq?.has);
+  badge('deepseek',   r.deepseek?.has);
+  badge('mistral',    r.mistral?.has);
+  badge('together',   r.together?.has);
+  badge('claude_web',  r.claude_web?.has);
+  badge('chatgpt_web', r.chatgpt_web?.has);
+  // Ollama: show configured URL
+  const ollamaUrl = document.getElementById('aip-ollama-url');
+  if (ollamaUrl && r.ollama?.url) ollamaUrl.value = r.ollama.url;
+  // Web session badges: show masked token if set
+  const cwBadge = document.getElementById('aip-claude_web-badge');
+  if (cwBadge && r.claude_web?.has && r.claude_web?.masked) {
+    cwBadge.title = r.claude_web.masked;
+  }
+  const cgBadge = document.getElementById('aip-chatgpt_web-badge');
+  if (cgBadge && r.chatgpt_web?.has && r.chatgpt_web?.masked) {
+    cgBadge.title = r.chatgpt_web.masked;
+  }
+
   if (r.default_provider) {
     const dp = document.getElementById('aip-default-provider');
     if (dp) { dp.value = r.default_provider; updateAipModelOptions(); }
@@ -7877,17 +8816,34 @@ async function loadAiKeys() {
 async function saveAiKeys() {
   const getVal = id => document.getElementById(id)?.value?.trim() || undefined;
   const body = {};
-  const ck = getVal('aip-claude-key'); if (ck) body.claude_key = ck;
-  const ok = getVal('aip-openai-key'); if (ok) body.openai_key = ok;
-  const gk = getVal('aip-gemini-key'); if (gk) body.gemini_key = gk;
-  const xk = getVal('aip-grok-key');   if (xk) body.grok_key   = xk;
+  const fields = [
+    ['aip-claude-key',         'claude_key'],
+    ['aip-openai-key',         'openai_key'],
+    ['aip-gemini-key',         'gemini_key'],
+    ['aip-grok-key',           'grok_key'],
+    ['aip-openrouter-key',     'openrouter_key'],
+    ['aip-groq-key',           'groq_key'],
+    ['aip-deepseek-key',       'deepseek_key'],
+    ['aip-mistral-key',        'mistral_key'],
+    ['aip-together-key',       'together_key'],
+    ['aip-ollama-url',         'ollama_url'],
+    ['aip-claude-web-session', 'claude_web_session'],
+    ['aip-chatgpt-web-token',  'chatgpt_web_token'],
+  ];
+  fields.forEach(([elId, key]) => { const v = getVal(elId); if (v) body[key] = v; });
   body.default_ai_provider = getVal('aip-default-provider') || 'claude';
   body.default_ai_model    = getVal('aip-default-model')    || '';
   const res = document.getElementById('aip-result');
-  if (res) res.textContent = 'Saving...';
+  if (res) { res.style.color='var(--muted)'; res.textContent='Saving...'; }
   const r = await api('/api/import/aikeys', {method:'POST', body:JSON.stringify(body)});
   if (r?.ok) {
     if (res) { res.style.color='#00e676'; res.textContent='✓ Keys saved'; setTimeout(()=>res.textContent='',3000); }
+    // Clear password fields after saving
+    ['aip-claude-key','aip-openai-key','aip-gemini-key','aip-grok-key','aip-openrouter-key',
+     'aip-groq-key','aip-deepseek-key','aip-mistral-key','aip-together-key',
+     'aip-claude-web-session','aip-chatgpt-web-token'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
     // Update office model selector to match default
     const dp = document.getElementById('aip-default-provider');
     const ps = document.getElementById('ofc-provider-sel');
@@ -7895,6 +8851,52 @@ async function saveAiKeys() {
     await loadAiKeys();
   } else {
     if (res) { res.style.color='#ff4444'; res.textContent='Error saving keys'; }
+  }
+}
+
+// ── PER-EMPLOYEE AI ENGINE ────────────────────────────────────────────────────
+async function loadEmpAiModel(empId) {
+  const r = await api(`/api/employees/${empId}/ai-model`);
+  if (!r) return;
+  const provSel  = document.getElementById(`emp-${empId}-ai-provider`);
+  const modSel   = document.getElementById(`emp-${empId}-ai-model`);
+  if (provSel) {
+    provSel.value = r.effective_provider || 'claude';
+    empUpdateModelSel(empId);
+  }
+  if (modSel && r.effective_model) modSel.value = r.effective_model;
+  const lbl = document.getElementById(`emp-${empId}-ai-current`);
+  if (lbl) {
+    const isOverride = bool(r.provider_override);
+    lbl.textContent = r.effective_provider + ' / ' + r.effective_model;
+    lbl.style.color = isOverride ? 'var(--cyan)' : 'var(--muted)';
+  }
+}
+function bool(v) { return v !== null && v !== undefined && v !== ''; }
+
+function empUpdateModelSel(empId) {
+  const provSel = document.getElementById(`emp-${empId}-ai-provider`);
+  const modSel  = document.getElementById(`emp-${empId}-ai-model`);
+  if (!provSel || !modSel) return;
+  const prov = provSel.value || 'claude';
+  const opts = _ALL_MODELS[prov] || _ALL_MODELS.claude;
+  modSel.innerHTML = opts.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+async function saveEmpAiModel(empId) {
+  const provSel = document.getElementById(`emp-${empId}-ai-provider`);
+  const modSel  = document.getElementById(`emp-${empId}-ai-model`);
+  const resEl   = document.getElementById(`emp-${empId}-ai-result`);
+  const provider = provSel?.value || '';
+  const model    = modSel?.value  || '';
+  if (resEl) { resEl.style.color='var(--muted)'; resEl.textContent='Saving…'; }
+  const r = await api(`/api/employees/${empId}/ai-model`, {
+    method:'PATCH', body:JSON.stringify({provider, model}),
+  });
+  if (r?.ok) {
+    if (resEl) { resEl.style.color='#00e676'; resEl.textContent=`✓ ${r.provider} / ${r.model}`; }
+  } else {
+    if (resEl) { resEl.style.color='#ff4444'; resEl.textContent='Save failed'; }
   }
 }
 
@@ -7987,6 +8989,1216 @@ async function disconnectM365OAuth() {
     if (res) { res.style.color='#ff4444'; res.textContent='Disconnect failed'; }
   }
 }
+
+
+// ═══════════════════════════════════════════════════════════
+//  INCIDENTS PAGE
+// ═══════════════════════════════════════════════════════════
+
+let _incFilter = 'open';
+
+function incFilterSet(f, btn) {
+  _incFilter = f;
+  document.querySelectorAll('#page-incidents .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  loadIncidents();
+}
+
+function toggleCreateIncident() {
+  const p = document.getElementById('inc-create-panel');
+  p.classList.toggle('open');
+  if (p.classList.contains('open')) document.getElementById('inc-new-title').focus();
+}
+
+async function loadIncidents() {
+  const tbody = document.getElementById('inc-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="9" class="inc-empty">Loading…</td></tr>';
+  let url = '/api/incidents';
+  if (_incFilter !== 'all') url += `?status=${encodeURIComponent(_incFilter)}`;
+  const rows = await api(url);
+  if (!rows) { tbody.innerHTML = '<tr><td colspan="9" class="inc-empty">Error loading incidents</td></tr>'; return; }
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="9" class="inc-empty">No incidents found — great job! 🎉</td></tr>'; updateIncidentsBadge(0); return; }
+  updateIncidentsBadge(rows.filter(r=>r.status==='open'||r.status==='investigating').length);
+  tbody.innerHTML = rows.map(inc => {
+    const sevColor = {5:'var(--sev5)',4:'var(--sev4)',3:'var(--sev3)',2:'var(--sev2)',1:'var(--sev1)'}[inc.severity] || 'var(--muted)';
+    const statusClass = `inc-status-${inc.status || 'open'}`;
+    const age = incAge(inc.started_at);
+    return `<tr class="inc-data-row" onclick="openWarRoom(${inc.id})">
+      <td style="padding:0 3px"><div class="inc-sev-bar" style="background:${sevColor}"></div></td>
+      <td><span style="font-family:'JetBrains Mono',monospace;color:var(--muted)">INC-${String(inc.id).padStart(4,'0')}</span></td>
+      <td><span class="inc-sev-badge" style="background:${sevColor}22;color:${sevColor};border:1px solid ${sevColor}44">${inc.sev_label||'Unknown'}</span></td>
+      <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(inc.title)}</td>
+      <td style="color:var(--muted);font-size:11px">${esc(inc.host||'—')}</td>
+      <td><span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--cyan)">${esc(inc.owner_id||'—')}</span></td>
+      <td><span class="inc-status-badge ${statusClass}">${inc.status||'open'}</span></td>
+      <td style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace">${age}</td>
+      <td onclick="event.stopPropagation()"><button class="tb-btn" style="font-size:10px;padding:3px 10px;color:#ff6b6b;border-color:rgba(255,23,68,0.3)" onclick="openWarRoom(${inc.id})">⚔ War Room</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function updateIncidentsBadge(n) {
+  const b = document.getElementById('incidents-badge');
+  if (!b) return;
+  if (n > 0) { b.textContent = n; b.classList.remove('hidden'); }
+  else { b.classList.add('hidden'); }
+}
+
+function incAge(started_at) {
+  if (!started_at || started_at === 'None') return '—';
+  const ms = Date.now() - new Date(started_at).getTime();
+  if (isNaN(ms) || ms < 0) return '—';
+  const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60), d = Math.floor(h/24);
+  if (d > 0) return `${d}d ${h%24}h`;
+  if (h > 0) return `${h}h ${m%60}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function createIncident() {
+  const title = document.getElementById('inc-new-title').value.trim();
+  const host  = document.getElementById('inc-new-host').value.trim();
+  const sev   = parseInt(document.getElementById('inc-new-sev').value);
+  const owner = document.getElementById('inc-new-owner').value;
+  const res   = document.getElementById('inc-create-result');
+  if (!title) { res.style.color='#ff4444'; res.textContent='Title is required'; return; }
+  res.style.color='var(--muted)'; res.textContent='Creating…';
+  const r = await api('/api/incidents', {method:'POST', body:JSON.stringify({title, host:host||null, severity:sev, owner_id:owner})});
+  if (r?.ok) {
+    res.style.color='#00e676'; res.textContent=`✓ INC-${String(r.id).padStart(4,'0')} created`;
+    document.getElementById('inc-new-title').value='';
+    document.getElementById('inc-new-host').value='';
+    setTimeout(()=>{ res.textContent=''; toggleCreateIncident(); }, 1200);
+    loadIncidents();
+  } else {
+    res.style.color='#ff4444'; res.textContent='Error: ' + (r?.detail||'Unknown');
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  WAR ROOM MODAL
+// ═══════════════════════════════════════════════════════════
+
+let _wrIncId = null;
+let _wrTimer = null;
+let _wrStartedAt = null;
+
+async function openWarRoom(incId) {
+  _wrIncId = incId;
+  document.getElementById('warroom-modal').classList.add('active');
+  document.getElementById('wr-title').textContent = 'Loading…';
+  document.getElementById('wr-timeline').innerHTML = '<div class="warroom-empty">Loading…</div>';
+  document.getElementById('wr-broadcast-result').textContent = '';
+  document.getElementById('wr-ai-result').textContent = '';
+  await refreshWarRoom();
+  // Start stopwatch
+  if (_wrTimer) clearInterval(_wrTimer);
+  _wrTimer = setInterval(updateWarRoomStopwatch, 1000);
+  updateWarRoomStopwatch();
+}
+
+function closeWarRoom() {
+  document.getElementById('warroom-modal').classList.remove('active');
+  if (_wrTimer) { clearInterval(_wrTimer); _wrTimer = null; }
+  _wrIncId = null; _wrStartedAt = null;
+}
+
+async function refreshWarRoom() {
+  if (!_wrIncId) return;
+  const inc = await api(`/api/incidents/${_wrIncId}`);
+  if (!inc) return;
+  const sevColor = {5:'var(--sev5)',4:'var(--sev4)',3:'var(--sev3)',2:'var(--sev2)',1:'var(--sev1)'}[inc.severity]||'var(--muted)';
+  const badge = document.getElementById('wr-sev-badge');
+  badge.textContent = inc.sev_label || 'SEV';
+  badge.style.cssText = `background:${sevColor}22;color:${sevColor};border:1px solid ${sevColor}44`;
+  document.getElementById('wr-title').textContent = `INC-${String(inc.id).padStart(4,'0')}: ${inc.title}`;
+  document.getElementById('wr-meta').textContent = `Owner: ${(inc.owner_id||'Unassigned').toUpperCase()} · Host: ${inc.host||'—'} · Status: ${inc.status}`;
+  _wrStartedAt = inc.started_at && inc.started_at !== 'None' ? new Date(inc.started_at) : null;
+  updateWarRoomStopwatch();
+  // Render timeline
+  const timeline = document.getElementById('wr-timeline');
+  const updates = inc.updates || [];
+  if (!updates.length) {
+    timeline.innerHTML = '<div class="warroom-empty">No updates yet — be the first to post.</div>';
+  } else {
+    const dotColor = {status:'var(--cyan)',action:'var(--yellow)',escalation:'var(--red)',resolution:'var(--green)',finding:'var(--border2)'};
+    timeline.innerHTML = updates.map(u => `
+      <div class="warroom-update warroom-type-${u.update_type||'finding'}">
+        <div class="warroom-update-dot" style="background:${dotColor[u.update_type]||'var(--border2)'}"></div>
+        <div class="warroom-update-body">
+          <div class="warroom-update-meta">${esc(u.employee_id||'system')} · ${u.created_at ? new Date(u.created_at).toLocaleTimeString() : ''}</div>
+          <div class="warroom-update-text">${esc(u.update_text)}</div>
+        </div>
+      </div>`).join('');
+    // Auto-scroll timeline to bottom
+    const tl = document.querySelector('.warroom-timeline');
+    if (tl) tl.scrollTop = tl.scrollHeight;
+  }
+}
+
+function updateWarRoomStopwatch() {
+  const el = document.getElementById('wr-stopwatch');
+  if (!el) return;
+  if (!_wrStartedAt) { el.textContent = '—'; return; }
+  const ms = Date.now() - _wrStartedAt.getTime();
+  const s = Math.floor(ms/1000) % 60;
+  const m = Math.floor(ms/60000) % 60;
+  const h = Math.floor(ms/3600000);
+  el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+async function warRoomAddUpdate() {
+  if (!_wrIncId) return;
+  const text = document.getElementById('wr-update-text').value.trim();
+  const type = document.getElementById('wr-update-type').value;
+  if (!text) return;
+  const r = await api(`/api/incidents/${_wrIncId}/update`, {method:'POST', body:JSON.stringify({update_text:text, update_type:type})});
+  if (r?.ok) {
+    document.getElementById('wr-update-text').value = '';
+    await refreshWarRoom();
+  }
+}
+
+async function warRoomSetStatus(status) {
+  if (!_wrIncId) return;
+  const r = await api(`/api/incidents/${_wrIncId}`, {method:'PUT', body:JSON.stringify({status})});
+  if (r?.ok) {
+    await refreshWarRoom();
+    if (status === 'resolved' || status === 'closed') loadIncidents();
+  }
+}
+
+async function warRoomAskUpdate() {
+  if (!_wrIncId) return;
+  const el = document.getElementById('wr-ai-result');
+  el.textContent = 'Requesting AI update…';
+  const r = await api(`/api/incidents/${_wrIncId}/ask-update`, {method:'POST'});
+  if (r?.ok) {
+    el.textContent = r.message || 'Update requested — check timeline in a moment.';
+    setTimeout(() => refreshWarRoom(), 4000);
+  } else {
+    el.textContent = 'Failed to request update.';
+  }
+}
+
+async function warRoomBroadcast() {
+  if (!_wrIncId) return;
+  const msg = document.getElementById('wr-broadcast-msg').value.trim();
+  const res = document.getElementById('wr-broadcast-result');
+  if (!msg) { res.style.color='#ff4444'; res.textContent='Enter a message to broadcast'; return; }
+  res.style.color='var(--muted)'; res.textContent='Broadcasting…';
+  // Add update to incident timeline first
+  await api(`/api/incidents/${_wrIncId}/update`, {method:'POST', body:JSON.stringify({update_text:'[BROADCAST] '+msg, update_type:'escalation'})});
+  // Send to all configured Teams webhooks
+  const webhooks = await api('/api/ms365/teams-webhooks');
+  let sent = 0;
+  if (webhooks && webhooks.length) {
+    for (const wh of webhooks) {
+      const r = await api('/api/ms365/send-teams', {method:'POST', body:JSON.stringify({webhook_url:wh.webhook_url, message:msg, title:`⚔ War Room Broadcast — INC-${String(_wrIncId).padStart(4,'0')}`})});
+      if (r?.ok) sent++;
+    }
+  }
+  res.style.color='#00e676';
+  res.textContent = sent > 0 ? `✓ Broadcast sent to ${sent} Teams channel${sent>1?'s':''}` : '✓ Update logged (no Teams webhooks configured)';
+  document.getElementById('wr-broadcast-msg').value = '';
+  setTimeout(() => { res.textContent=''; }, 4000);
+  await refreshWarRoom();
+}
+
+// Close war room on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('warroom-modal').classList.contains('active')) { closeWarRoom(); return; }
+    if (document.getElementById('tv-mode-overlay').classList.contains('active')) { toggleTvMode(); }
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════
+//  NOC TV MODE
+// ═══════════════════════════════════════════════════════════
+
+let _tvTimer = null;
+let _tvClockTimer = null;
+let _tvTickerAnim = null;
+
+function toggleTvMode() {
+  const overlay = document.getElementById('tv-mode-overlay');
+  const active = overlay.classList.toggle('active');
+  if (active) {
+    refreshTvMode();
+    _tvTimer = setInterval(refreshTvMode, 30000);
+    _tvClockTimer = setInterval(updateTvClock, 1000);
+    updateTvClock();
+    // Fullscreen attempt
+    try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); } catch(_){}
+  } else {
+    if (_tvTimer) { clearInterval(_tvTimer); _tvTimer = null; }
+    if (_tvClockTimer) { clearInterval(_tvClockTimer); _tvClockTimer = null; }
+    try { document.fullscreenElement && document.exitFullscreen(); } catch(_){}
+  }
+}
+
+function updateTvClock() {
+  const now = new Date();
+  const timeEl = document.getElementById('tv-clock');
+  const dateEl = document.getElementById('tv-date');
+  if (timeEl) timeEl.textContent = now.toLocaleTimeString('en-US', {hour12:false});
+  if (dateEl) dateEl.textContent = now.toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+}
+
+async function refreshTvMode() {
+  await Promise.all([
+    refreshTvAlarms(),
+    refreshTvIncidents(),
+    refreshTvEmployees(),
+  ]);
+  refreshTvTicker();
+}
+
+function refreshTvAlarms() {
+  // Use global S.allProblems if available
+  const problems = (typeof S !== 'undefined' && S.allProblems) ? S.allProblems : [];
+  const counts = {5:0,4:0,3:0,2:0,1:0};
+  problems.forEach(p => { const s=parseInt(p.severity); if(counts[s]!==undefined) counts[s]++; });
+  const total = Object.values(counts).reduce((a,b)=>a+b,0);
+  [5,4,3,2,1].forEach(s => {
+    const el = document.getElementById(`tv-sev${s}`);
+    if (el) el.textContent = counts[s];
+  });
+  const tel = document.getElementById('tv-total');
+  if (tel) tel.textContent = total;
+}
+
+async function refreshTvIncidents() {
+  const list = document.getElementById('tv-inc-list');
+  if (!list) return;
+  const rows = await api('/api/incidents');
+  if (!rows || !rows.length) {
+    list.innerHTML = '<div style="color:var(--green);font-size:12px;text-align:center;padding:20px">✓ No open incidents</div>';
+    return;
+  }
+  const sevColor = s => ({5:'var(--sev5)',4:'var(--sev4)',3:'var(--sev3)',2:'var(--sev2)',1:'var(--sev1)'}[s]||'var(--muted)');
+  list.innerHTML = rows.slice(0, 8).map(inc => `
+    <div class="tv-inc-row">
+      <div class="tv-inc-sev-bar" style="background:${sevColor(inc.severity)}"></div>
+      <div>
+        <div class="tv-inc-title">${esc(inc.title)}</div>
+        <div class="tv-inc-meta">${inc.sev_label} · ${(inc.owner_id||'unassigned').toUpperCase()} · ${incAge(inc.started_at)}</div>
+      </div>
+    </div>`).join('');
+}
+
+async function refreshTvEmployees() {
+  const list = document.getElementById('tv-emp-list');
+  if (!list) return;
+  const emps = await api('/api/employees');
+  if (!emps || !emps.length) { list.innerHTML = '<div style="color:var(--muted);font-size:11px;text-align:center;padding:20px">No data</div>'; return; }
+  const statusColor = s => s==='available'?'var(--green)':s==='investigating'?'var(--yellow)':s==='offline'?'var(--red)':'var(--muted)';
+  list.innerHTML = emps.map(e => `
+    <div class="tv-emp-row" style="border-left-color:${statusColor(e.status)}">
+      <div class="tv-emp-dot" style="background:${statusColor(e.status)};box-shadow:0 0 6px ${statusColor(e.status)}"></div>
+      <div class="tv-emp-name">${esc((e.name||e.id||'').toUpperCase())}</div>
+      <div class="tv-emp-status">${esc(e.current_task||e.status||'standby')}</div>
+    </div>`).join('');
+}
+
+function refreshTvTicker() {
+  const ticker = document.getElementById('tv-ticker-inner');
+  if (!ticker) return;
+  const problems = (typeof S !== 'undefined' && S.allProblems) ? S.allProblems : [];
+  if (!problems.length) { ticker.textContent = 'No active alarms — network nominal'; return; }
+  const items = problems.slice(0, 20).map(p => {
+    const sev = ['','INFO','WARNING','AVERAGE','HIGH','DISASTER'][p.severity]||'UNKNOWN';
+    return `[${sev}] ${p.hosts?.[0]?.name||'Unknown'} — ${p.name||p.description||'Problem'}`;
+  });
+  ticker.textContent = items.join('   ·   ');
+  // Restart animation
+  ticker.style.animation = 'none';
+  ticker.offsetHeight; // force reflow
+  const duration = Math.max(30, items.join('   ·   ').length * 0.12);
+  ticker.style.animation = `tv-scroll ${duration}s linear infinite`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RUNBOOKS
+// ═══════════════════════════════════════════════════════════
+let _rbAll = [], _rbFilter = 'approved', _rbSearch = '';
+
+async function loadRunbooks() {
+  const grid = document.getElementById('rb-grid');
+  if (grid) grid.innerHTML = '<div class="rb-empty">Loading…</div>';
+  const data = await api('/api/runbooks?include_deprecated=true') || [];
+  _rbAll = Array.isArray(data) ? data : (data.runbooks || []);
+  renderRunbooks();
+  // Update badge count (approved runbooks)
+  const badge = document.getElementById('runbooks-badge');
+  const approved = _rbAll.filter(r => r.status === 'approved').length;
+  if (badge) { badge.textContent = approved; badge.classList.toggle('hidden', approved === 0); }
+}
+
+function rbFilterSet(f, btn) {
+  _rbFilter = f;
+  document.querySelectorAll('#page-runbooks .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderRunbooks();
+}
+
+function rbSearch(q) { _rbSearch = q.toLowerCase(); renderRunbooks(); }
+
+function renderRunbooks() {
+  const grid = document.getElementById('rb-grid');
+  if (!grid) return;
+  let list = _rbAll;
+  if (_rbFilter === 'approved')   list = list.filter(r => r.status === 'approved');
+  else if (_rbFilter === 'draft') list = list.filter(r => r.status === 'draft');
+  else list = list.filter(r => r.status !== 'deprecated');
+  if (_rbSearch) list = list.filter(r =>
+    (r.title||'').toLowerCase().includes(_rbSearch) ||
+    (r.trigger_keywords||'').toLowerCase().includes(_rbSearch) ||
+    (r.author_id||'').toLowerCase().includes(_rbSearch)
+  );
+  if (!list.length) { grid.innerHTML = '<div class="rb-empty">No runbooks found.</div>'; return; }
+  grid.innerHTML = list.map(r => {
+    const kws = (r.trigger_keywords||'').split(',').map(k=>k.trim()).filter(Boolean);
+    const statusCls = `rb-status-${r.status||'draft'}`;
+    return `<div class="rb-card" onclick="openRbModal(${r.id})">
+      <div class="rb-card-hdr">
+        <div class="rb-card-title">${esc(r.title||'Untitled')}</div>
+        <span class="rb-status ${statusCls}">${r.status||'draft'}</span>
+      </div>
+      <div class="rb-card-meta">
+        ${r.author_id ? `<span>✍ ${r.author_id.toUpperCase()}</span>` : ''}
+        ${r.estimated_mttr ? `<span>⏱ ${r.estimated_mttr}m MTTR</span>` : ''}
+        ${r.last_tested ? `<span>✓ tested ${r.last_tested}</span>` : ''}
+        ${r.related_hosts ? `<span>🖥 ${r.related_hosts}</span>` : ''}
+      </div>
+      ${kws.length ? `<div class="rb-card-keywords">${kws.map(k=>`<span class="rb-keyword">${esc(k)}</span>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function openRbModal(rbId) {
+  const modal = document.getElementById('rb-modal');
+  if (!modal) return;
+  // Reset
+  ['rb-edit-id','rb-title','rb-keywords','rb-hosts','rb-trigger-desc',
+   'rb-symptoms','rb-diagnosis','rb-resolution','rb-prevention','rb-rollback'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('rb-author').value = '';
+  document.getElementById('rb-status').value = 'draft';
+  document.getElementById('rb-mttr').value = '';
+  document.getElementById('rb-approve-btn').style.display = 'none';
+  document.getElementById('rb-deprecate-btn').style.display = 'none';
+  document.getElementById('rb-modal-result').textContent = '';
+  document.getElementById('rb-modal-heading').textContent = rbId ? 'Edit Runbook' : 'New Runbook';
+
+  if (rbId) {
+    const r = await api(`/api/runbooks/${rbId}`);
+    if (r) {
+      document.getElementById('rb-edit-id').value = r.id;
+      document.getElementById('rb-title').value = r.title || '';
+      document.getElementById('rb-author').value = r.author_id || '';
+      document.getElementById('rb-status').value = r.status || 'draft';
+      document.getElementById('rb-keywords').value = r.trigger_keywords || '';
+      document.getElementById('rb-hosts').value = r.related_hosts || '';
+      document.getElementById('rb-mttr').value = r.estimated_mttr || '';
+      document.getElementById('rb-trigger-desc').value = r.trigger_desc || '';
+      document.getElementById('rb-symptoms').value = r.symptoms || '';
+      document.getElementById('rb-diagnosis').value = r.diagnosis || '';
+      document.getElementById('rb-resolution').value = r.resolution || '';
+      document.getElementById('rb-prevention').value = r.prevention || '';
+      document.getElementById('rb-rollback').value = r.rollback || '';
+      if (r.status === 'draft') document.getElementById('rb-approve-btn').style.display = '';
+      if (r.status !== 'deprecated') document.getElementById('rb-deprecate-btn').style.display = '';
+    }
+  }
+  modal.classList.add('active');
+}
+
+function closeRbModal() {
+  const modal = document.getElementById('rb-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function saveRunbook() {
+  const rbId = document.getElementById('rb-edit-id').value;
+  const res = document.getElementById('rb-modal-result');
+  const body = {
+    title:            document.getElementById('rb-title').value.trim(),
+    author_id:        document.getElementById('rb-author').value || null,
+    status:           document.getElementById('rb-status').value,
+    trigger_keywords: document.getElementById('rb-keywords').value.trim(),
+    related_hosts:    document.getElementById('rb-hosts').value.trim(),
+    estimated_mttr:   parseInt(document.getElementById('rb-mttr').value) || null,
+    trigger_desc:     document.getElementById('rb-trigger-desc').value.trim(),
+    symptoms:         document.getElementById('rb-symptoms').value.trim(),
+    diagnosis:        document.getElementById('rb-diagnosis').value.trim(),
+    resolution:       document.getElementById('rb-resolution').value.trim(),
+    prevention:       document.getElementById('rb-prevention').value.trim(),
+    rollback:         document.getElementById('rb-rollback').value.trim(),
+  };
+  if (!body.title) { res.style.color='#ff4444'; res.textContent='Title required'; return; }
+  const url = rbId ? `/api/runbooks/${rbId}` : '/api/runbooks';
+  const method = rbId ? 'PATCH' : 'POST';
+  const r = await api(url, {method, body: JSON.stringify(body)});
+  if (r && (r.id || r.ok !== false)) {
+    res.style.color='#00e676'; res.textContent='✓ Saved';
+    setTimeout(() => { closeRbModal(); loadRunbooks(); }, 800);
+  } else {
+    res.style.color='#ff4444'; res.textContent = r?.detail || 'Error saving';
+  }
+}
+
+async function approveRunbook() {
+  const rbId = document.getElementById('rb-edit-id').value;
+  if (!rbId) return;
+  const r = await api(`/api/runbooks/${rbId}/approve`, {method:'PUT'});
+  const res = document.getElementById('rb-modal-result');
+  if (r?.ok) { res.style.color='#00e676'; res.textContent='✓ Approved'; setTimeout(()=>{closeRbModal();loadRunbooks();},800); }
+  else { res.style.color='#ff4444'; res.textContent='Error'; }
+}
+
+async function deprecateRunbook() {
+  const rbId = document.getElementById('rb-edit-id').value;
+  if (!rbId || !confirm('Deprecate this runbook?')) return;
+  const r = await api(`/api/runbooks/${rbId}`, {method:'DELETE'});
+  const res = document.getElementById('rb-modal-result');
+  if (r?.ok) { res.style.color='var(--muted)'; res.textContent='Deprecated'; setTimeout(()=>{closeRbModal();loadRunbooks();},800); }
+  else { res.style.color='#ff4444'; res.textContent='Error'; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SLA DASHBOARD
+// ═══════════════════════════════════════════════════════════
+let _slaServices = [], _slaSelectedService = null;
+
+async function loadSla() {
+  const cards = document.getElementById('sla-cards');
+  if (cards) cards.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:12px">Loading…</div>';
+  const data = await api('/api/sla') || [];
+  _slaServices = Array.isArray(data) ? data : [];
+  renderSlaCards();
+  // update month label
+  const lbl = document.getElementById('sla-month-label');
+  if (lbl && _slaServices.length) lbl.textContent = _slaServices[0].month || '';
+  if (_slaSelectedService) loadSlaEvents(_slaSelectedService);
+}
+
+function renderSlaCards() {
+  const cards = document.getElementById('sla-cards');
+  if (!cards) return;
+  if (!_slaServices.length) {
+    cards.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--muted);font-size:12px">No services configured. Click "+ Add Service" to get started.</div>';
+    return;
+  }
+  cards.innerHTML = _slaServices.map(s => {
+    const st = s.status || 'ok';
+    const pctColor = `sla-pct-${st}`;
+    const badgeCls = `sla-badge-${st}`;
+    const cardCls  = `sla-card-${st}`;
+    const barColor = st==='ok'?'var(--green)':st==='at_risk'?'var(--yellow)':'var(--red)';
+    const budgetUsed = Math.min(100, s.used_pct || 0);
+    return `<div class="sla-card ${cardCls}" onclick="loadSlaEvents('${esc(s.service)}')" style="cursor:pointer" title="Click to see events">
+      <div class="sla-card-name">
+        <span>${esc(s.service)}</span>
+        <span class="sla-status-badge ${badgeCls}">${st.replace('_',' ')}</span>
+      </div>
+      <div class="sla-pct ${pctColor}">${(s.uptime_pct??100).toFixed(3)}%</div>
+      <div class="sla-bar-wrap"><div class="sla-bar-fill" style="width:${budgetUsed}%;background:${barColor}"></div></div>
+      <div class="sla-meta">
+        <span>Target: ${s.target_sla}%</span>
+        <span>Downtime: ${s.downtime_min||0}m</span>
+        <span>Budget used: ${(s.used_pct||0).toFixed(1)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadSlaEvents(service) {
+  _slaSelectedService = service;
+  const lbl = document.getElementById('sla-events-service-label');
+  const list = document.getElementById('sla-events-list');
+  if (lbl) lbl.textContent = `— ${service}`;
+  if (list) list.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Loading…</div>';
+  const data = await api(`/api/sla/events/${encodeURIComponent(service)}`) || [];
+  const events = Array.isArray(data) ? data : [];
+  if (!list) return;
+  if (!events.length) { list.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">No events this month.</div>'; return; }
+  list.innerHTML = events.map(e => {
+    const dt = e.occurred_at ? new Date(e.occurred_at).toLocaleString() : '';
+    return `<div class="sla-event-row">
+      <span class="sla-event-type sla-evt-${e.event_type||''}">${(e.event_type||'').replace(/_/g,' ')}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted)">${dt}</div>
+        ${e.impact_note?`<div style="font-size:12px;color:var(--text);margin-top:2px">${esc(e.impact_note)}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openSlaModal(mode) {
+  const modal = document.getElementById('sla-modal');
+  if (!modal) return;
+  document.getElementById('sla-form-service').style.display = mode==='add-service' ? '' : 'none';
+  document.getElementById('sla-form-event').style.display   = mode==='log-event'   ? '' : 'none';
+  document.getElementById('sla-modal-title').textContent = mode==='add-service' ? 'Add / Update Service' : 'Log Outage / Degraded Event';
+  document.getElementById('sla-modal-result').textContent = '';
+  if (mode==='log-event') {
+    const sel = document.getElementById('sla-evt-service');
+    if (sel) {
+      sel.innerHTML = '<option value="">— Select —</option>' + _slaServices.map(s=>`<option value="${esc(s.service)}">${esc(s.service)}</option>`).join('');
+    }
+  }
+  modal.classList.add('active');
+}
+
+function closeSlaModal() {
+  const modal = document.getElementById('sla-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function saveSlaService() {
+  const name = document.getElementById('sla-svc-name').value.trim();
+  const target = parseFloat(document.getElementById('sla-svc-target').value) || 99.9;
+  const res = document.getElementById('sla-modal-result');
+  if (!name) { res.style.color='#ff4444'; res.textContent='Service name required'; return; }
+  const r = await api('/api/sla/service', {method:'POST', body:JSON.stringify({service:name, target_sla:target})});
+  if (r?.ok) { res.style.color='#00e676'; res.textContent='✓ Service saved'; setTimeout(()=>{closeSlaModal();loadSla();},700); }
+  else { res.style.color='#ff4444'; res.textContent=r?.detail||'Error'; }
+}
+
+async function saveSlaEvent() {
+  const service   = document.getElementById('sla-evt-service').value;
+  const eventType = document.getElementById('sla-evt-type').value;
+  const note      = document.getElementById('sla-evt-note').value.trim();
+  const res = document.getElementById('sla-modal-result');
+  if (!service) { res.style.color='#ff4444'; res.textContent='Select a service'; return; }
+  const r = await api('/api/sla/event', {method:'POST', body:JSON.stringify({service, event_type:eventType, impact_note:note||null})});
+  if (r?.ok) { res.style.color='#00e676'; res.textContent='✓ Event logged'; setTimeout(()=>{closeSlaModal();loadSla();},700); }
+  else { res.style.color='#ff4444'; res.textContent=r?.detail||'Error'; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WORKFLOWS STANDALONE PAGE
+// ═══════════════════════════════════════════════════════════
+let _wfsAll = [], _wfsFilter = 'all';
+
+async function loadWfs() {
+  const grid = document.getElementById('wfs-grid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--muted);font-size:12px">Loading…</div>';
+  const data = await api('/api/workflows') || [];
+  _wfsAll = Array.isArray(data) ? data : [];
+  renderWfs();
+}
+
+function wfsFilterSet(f, btn) {
+  _wfsFilter = f;
+  document.querySelectorAll('#page-workflows .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderWfs();
+}
+
+function renderWfs() {
+  const grid = document.getElementById('wfs-grid');
+  if (!grid) return;
+  let list = _wfsAll;
+  if (_wfsFilter === 'active') list = list.filter(w => w.is_active);
+  else if (_wfsFilter === 'alarm') list = list.filter(w => w.trigger_type === 'alarm');
+  if (!list.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--muted);font-size:12px">No workflows found. Click "+ New Workflow" to create one.</div>';
+    return;
+  }
+  const empColors = {aria:'#00d4ff',nexus:'#a78bfa',cipher:'#ff4466',vega:'#4ade80'};
+  const empNames  = {aria:'ARIA',nexus:'NEXUS',cipher:'CIPHER',vega:'VEGA'};
+  const trigIcons = {manual:'🖱️',alarm:'🔔',schedule:'🕐'};
+  const actIcons  = {log:'📝',incident:'🚨',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
+  grid.innerHTML = list.map(w => {
+    const tc = w.trigger_config ? (typeof w.trigger_config==='string'?JSON.parse(w.trigger_config):w.trigger_config) : {};
+    let trigDetail = '';
+    if (w.trigger_type==='alarm') {
+      const sevLabels = {0:'Any alarm',3:'Avg+',4:'High+',5:'Disaster'};
+      trigDetail = sevLabels[tc.severity_min] || `sev≥${tc.severity_min}`;
+      if (tc.host_filter) trigDetail += ` · ${tc.host_filter}`;
+    } else if (w.trigger_type==='schedule') { trigDetail = tc.cron || ''; }
+    const empColor = empColors[w.employee_id] || '#8aa0c0';
+    const empLabel = empNames[w.employee_id]  || w.employee_id;
+    return `<div class="wf-card" id="wfs-${w.id}">
+      <div class="wf-card-top">
+        <div class="wf-name">${esc(w.name||'')}</div>
+        <div class="wf-active-badge ${w.is_active?'active':'inactive'}">${w.is_active?'● ON':'○ OFF'}</div>
+      </div>
+      <div class="wf-meta">
+        <span class="wf-badge ${w.trigger_type}">${trigIcons[w.trigger_type]||''} ${w.trigger_type}${trigDetail?' · '+trigDetail:''}</span>
+        <span style="font-size:10px;font-weight:700;color:${empColor};background:rgba(255,255,255,0.04);border:1px solid ${empColor}33;padding:2px 6px;border-radius:5px">${empLabel}</span>
+      </div>
+      ${w.prompt_template?`<div class="wf-prompt-preview">${esc(w.prompt_template.substring(0,90))}${w.prompt_template.length>90?'…':''}</div>`:''}
+      <div class="wf-actions">
+        <button class="wf-btn run" onclick="triggerWorkflow(${w.id},'${(w.name||'').replace(/'/g,"\\'")}')">▶ Run Now</button>
+        <button class="wf-btn" onclick="viewWfRuns(${w.id},'${(w.name||'').replace(/'/g,"\\'")}')">📋 History</button>
+        <button class="wf-btn" onclick="openEditWorkflowModal(${w.id})">✏️ Edit</button>
+        <button class="wf-btn del" onclick="deleteWorkflow(${w.id})">🗑 Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  AUTO-INCIDENT FROM CRITICAL ALARMS
+// ═══════════════════════════════════════════════════════════
+const _autoIncState = { enabled: false, severity: 4, assignee: '', seen: new Set() };
+
+function loadAutoIncSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('autoInc') || '{}');
+    _autoIncState.enabled  = saved.enabled  ?? false;
+    _autoIncState.severity = saved.severity ?? 4;
+    _autoIncState.assignee = saved.assignee ?? '';
+  } catch(e) {}
+  const enabledEl  = document.getElementById('auto-inc-enabled');
+  const sevEl      = document.getElementById('auto-inc-severity');
+  const assigneeEl = document.getElementById('auto-inc-assignee');
+  if (enabledEl)  enabledEl.checked        = _autoIncState.enabled;
+  if (sevEl)      sevEl.value              = String(_autoIncState.severity);
+  if (assigneeEl) assigneeEl.value         = _autoIncState.assignee;
+}
+
+function saveAutoIncSettings() {
+  const enabledEl  = document.getElementById('auto-inc-enabled');
+  const sevEl      = document.getElementById('auto-inc-severity');
+  const assigneeEl = document.getElementById('auto-inc-assignee');
+  _autoIncState.enabled  = enabledEl?.checked ?? false;
+  _autoIncState.severity = parseInt(sevEl?.value || '4');
+  _autoIncState.assignee = assigneeEl?.value || '';
+  localStorage.setItem('autoInc', JSON.stringify({
+    enabled: _autoIncState.enabled, severity: _autoIncState.severity, assignee: _autoIncState.assignee
+  }));
+  const res = document.getElementById('auto-inc-result');
+  if (res) { res.style.color='#00e676'; res.textContent='✓ Saved'; setTimeout(()=>res.textContent='',2000); }
+}
+
+async function autoIncidentCheck(problems) {
+  if (!_autoIncState.enabled || !problems?.length) return;
+  const threshold = _autoIncState.severity;
+  const triggering = problems.filter(p => parseInt(p.severity) >= threshold);
+  for (const p of triggering) {
+    const eventId = String(p.eventid || p.objectid || '');
+    if (!eventId || _autoIncState.seen.has(eventId)) continue;
+    _autoIncState.seen.add(eventId);
+    const hostname = p.hosts?.[0]?.name || p.host || '';
+    const sevName  = ['','Info','Warning','Average','High','Disaster'][parseInt(p.severity)] || 'High';
+    const body = {
+      title:    `[AUTO] ${sevName}: ${p.name || p.description || 'Alarm'}`,
+      host:     hostname,
+      severity: parseInt(p.severity) >= 5 ? 'critical' : parseInt(p.severity) >= 4 ? 'high' : 'medium',
+      owner:    _autoIncState.assignee || null,
+    };
+    const r = await api('/api/incidents', {method:'POST', body:JSON.stringify(body)});
+    if (r?.id) {
+      console.log(`[AutoInc] Created incident #${r.id} for event ${eventId}`);
+      updateIncidentsBadge((parseInt(document.getElementById('incidents-badge')?.textContent)||0)+1);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  VOICE CALL SYSTEM (VC)
+// ═══════════════════════════════════════════════════════════
+const VC = {
+  empId:    null,
+  state:    'idle',   // idle | calling | greeting | listening | thinking | speaking
+  muted:    false,
+  autoRead: true,
+  empAutoRead: {},    // per-employee auto-read override
+  synth:    window.speechSynthesis,
+  voices:   [],
+  recognition: null,
+  audioQueue:  [],    // { text, empId }
+  currentAudio: null, // HTMLAudioElement for OpenAI TTS
+  history:  [],
+  _interimEl: null,
+  _spaceHeld: false,
+
+  // Per-employee personality config
+  cfg: {
+    aria:   { emoji:'🤖', color:'#00d4ff', glow:'rgba(0,212,255,0.3)',  role:'NOC Analyst',        greet:"ARIA here. Network Operations Center is live. What do you need?", oaiVoice:'nova',    rate:0.92, pitch:1.05, voicePref:['Zira','Google US English Female','Microsoft Zira','en-US'] },
+    nexus:  { emoji:'⚡', color:'#a78bfa', glow:'rgba(167,139,250,0.3)', role:'Infrastructure Eng.', greet:"NEXUS. Infrastructure nominal. State your query.",                   oaiVoice:'onyx',    rate:0.95, pitch:0.85, voicePref:['George','Google UK English Male','Microsoft George','en-GB'] },
+    cipher: { emoji:'🔐', color:'#ff4466', glow:'rgba(255,68,100,0.3)',  role:'Security Analyst',   greet:"Cipher. Secure line. Go ahead.",                                       oaiVoice:'shimmer', rate:0.85, pitch:0.80, voicePref:['Hazel','Google UK English Female','Microsoft Hazel','en-GB'] },
+    vega:   { emoji:'📊', color:'#4ade80', glow:'rgba(74,222,128,0.3)',  role:'Site Reliability',   greet:"VEGA online. All systems green. What's the situation?",               oaiVoice:'echo',    rate:1.05, pitch:1.15, voicePref:['Karen','Google Australian English','Microsoft Karen','en-AU'] },
+  },
+
+  async init() {
+    // Load system voices (async on some browsers)
+    const loadVoices = () => { this.voices = this.synth.getVoices(); };
+    loadVoices();
+    if (!this.voices.length) speechSynthesis.addEventListener('voiceschanged', loadVoices);
+    // Init speech recognition
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      this.recognition = new SR();
+      this.recognition.continuous     = false;
+      this.recognition.interimResults = true;
+      this.recognition.lang           = 'en-US';
+      this.recognition.onresult       = (e) => this._onSpeechResult(e);
+      this.recognition.onend          = ()  => this._onSpeechEnd();
+      this.recognition.onerror        = (e) => { if (e.error !== 'no-speech' && e.error !== 'aborted') this._setStatus('listening', '🎤 LISTENING…'); };
+    }
+  },
+
+  _setOverlayClass(cls) {
+    const ov = document.getElementById('vc-overlay');
+    if (!ov) return;
+    ov.className = cls ? `active vc-overlay-${cls}` : 'active';
+  },
+
+  _setStatus(cssClass, label) {
+    const el = document.getElementById('vc-status-label');
+    if (!el) return;
+    el.className = `vc-status-label${cssClass ? ' ' + cssClass : ''}`;
+    el.textContent = label;
+    this._setOverlayClass(cssClass);
+  },
+
+  _addBubble(text, who) { // who = 'ai' | 'user' | 'interim'
+    const t = document.getElementById('vc-transcript');
+    if (!t) return null;
+    if (who === 'interim') {
+      if (!this._interimEl) {
+        this._interimEl = document.createElement('div');
+        this._interimEl.className = 'vc-bubble vc-bubble-interim';
+        t.appendChild(this._interimEl);
+      }
+      this._interimEl.textContent = text;
+      t.scrollTop = t.scrollHeight;
+      return this._interimEl;
+    }
+    // Remove interim if adding final
+    if (this._interimEl) { this._interimEl.remove(); this._interimEl = null; }
+    const div = document.createElement('div');
+    div.className = `vc-bubble vc-bubble-${who}`;
+    div.textContent = text;
+    t.appendChild(div);
+    t.scrollTop = t.scrollHeight;
+    return div;
+  },
+
+  async _pickVoice(empId) {
+    const prefs = this.cfg[empId]?.voicePref || [];
+    const voices = this.voices.length ? this.voices : speechSynthesis.getVoices();
+    for (const pref of prefs) {
+      const match = voices.find(v => v.name.includes(pref) || v.lang === pref);
+      if (match) return match;
+    }
+    // Fallback: any voice matching language hint
+    const langHint = this.cfg[empId]?.voicePref?.find(p => p.includes('-')) || 'en-US';
+    return voices.find(v => v.lang.startsWith(langHint.split('-')[0])) || voices[0] || null;
+  },
+
+  async _speakWithBackend(text, empId) {
+    // Try OpenAI TTS backend first
+    try {
+      const resp = await fetch('/api/office/tts', {
+        method: 'POST', credentials: 'include',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ text, employee: empId, speed: this.cfg[empId]?.rate || 1.0 }),
+      });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const url  = URL.createObjectURL(blob);
+        return new Promise((resolve) => {
+          const audio = new Audio(url);
+          this.currentAudio = audio;
+          audio.onended = () => { URL.revokeObjectURL(url); this.currentAudio = null; resolve(); };
+          audio.onerror = () => { URL.revokeObjectURL(url); this.currentAudio = null; resolve(); };
+          audio.play().catch(resolve);
+        });
+      }
+    } catch(e) {}
+    return null; // fall through to browser TTS
+  },
+
+  async _speak(text, empId) {
+    if (this.muted || !text?.trim()) return;
+    this.synth.cancel();
+    if (this.currentAudio) { this.currentAudio.pause(); this.currentAudio = null; }
+
+    const cfg = this.cfg[empId] || this.cfg.aria;
+    this._setStatus('speaking', '● SPEAKING…');
+    document.getElementById('vc-overlay').style.setProperty('--vc-color', cfg.color);
+    document.getElementById('vc-overlay').style.setProperty('--vc-glow',  cfg.glow);
+
+    // Try backend TTS (OpenAI — much better quality)
+    const backendResult = await this._speakWithBackend(text, empId);
+    if (backendResult !== null) return backendResult;
+
+    // Browser SpeechSynthesis fallback
+    return new Promise((resolve) => {
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.rate  = cfg.rate  || 0.95;
+      utt.pitch = cfg.pitch || 1.0;
+      utt.volume = 1.0;
+      this._pickVoice(empId).then(v => { if (v) utt.voice = v; });
+      utt.onend   = resolve;
+      utt.onerror = resolve;
+      this.synth.speak(utt);
+    });
+  },
+
+  async startCall(empId) {
+    if (this.state !== 'idle') return;
+    this.empId   = empId;
+    this.state   = 'calling';
+    this.history = [...(OFFICE_STATE.history[empId] || [])].slice(-10);
+    const cfg    = this.cfg[empId] || this.cfg.aria;
+
+    // Set up overlay visuals
+    const ov = document.getElementById('vc-overlay');
+    ov.style.setProperty('--vc-color', cfg.color);
+    ov.style.setProperty('--vc-glow',  cfg.glow);
+    document.getElementById('vc-avatar-emoji').textContent = cfg.emoji;
+    document.getElementById('vc-name').textContent  = empId.toUpperCase();
+    document.getElementById('vc-name').style.color  = cfg.color;
+    document.getElementById('vc-role').textContent  = cfg.role;
+    document.getElementById('vc-transcript').innerHTML = '';
+    this._interimEl = null;
+    this._setStatus('', 'Connecting…');
+    ov.classList.add('active');
+
+    // Greeting
+    this.state = 'greeting';
+    this._setStatus('speaking', '● SPEAKING…');
+    await this._speak(cfg.greet, empId);
+    this._addBubble(cfg.greet, 'ai');
+
+    // Start listening
+    this._startListening();
+  },
+
+  _startListening() {
+    if (this.state === 'idle') return;
+    this.state = 'listening';
+    this._setStatus('listening', '🎤 LISTENING…');
+    const micBtn = document.getElementById('vc-mic-btn');
+    if (micBtn) micBtn.classList.add('active');
+    if (this.recognition) {
+      try { this.recognition.start(); } catch(e) {}
+    } else {
+      this._setStatus('', '⚠ Speech recognition not supported in this browser');
+    }
+  },
+
+  _stopListening() {
+    const micBtn = document.getElementById('vc-mic-btn');
+    if (micBtn) micBtn.classList.remove('active');
+    if (this.recognition) { try { this.recognition.stop(); } catch(e) {} }
+  },
+
+  _onSpeechResult(e) {
+    let interim = '', final = '';
+    for (const res of e.results) {
+      if (res.isFinal) final += res[0].transcript;
+      else interim += res[0].transcript;
+    }
+    if (interim) this._addBubble(interim, 'interim');
+    if (final)   this._onFinalTranscript(final.trim());
+  },
+
+  _onSpeechEnd() {
+    if (this.state === 'listening') {
+      // Recognition ended without final result — restart or accept silence
+      const micBtn = document.getElementById('vc-mic-btn');
+      if (micBtn) micBtn.classList.remove('active');
+    }
+  },
+
+  async _onFinalTranscript(text) {
+    if (!text || this.state !== 'listening') return;
+    this._stopListening();
+    if (this._interimEl) { this._interimEl.remove(); this._interimEl = null; }
+    this._addBubble(text, 'user');
+    this.state = 'thinking';
+    this._setStatus('thinking', '◎ THINKING…');
+
+    // Also inject into the employee terminal
+    const chatIn = document.getElementById(`emp-${this.empId}-chat-in`);
+    if (chatIn) chatIn.value = text;
+
+    // Fetch AI response
+    const response = await this._fetchResponse(text);
+    if (!response) { this._startListening(); return; }
+
+    // Speak + add to transcript
+    this.state = 'speaking';
+    this._addBubble(response, 'ai');
+    await this._speak(response, this.empId);
+
+    // Save to history
+    this.history.push({role:'user', content:text});
+    this.history.push({role:'assistant', content:response});
+    if (OFFICE_STATE.history[this.empId]) {
+      OFFICE_STATE.history[this.empId].push({role:'user',content:text},{role:'assistant',content:response});
+    }
+
+    // Back to listening
+    if (this.state !== 'idle') this._startListening();
+  },
+
+  async _fetchResponse(userText) {
+    const netCtx = (typeof buildNetworkContext === 'function') ? buildNetworkContext() : '';
+    const history = this.history.slice(-16);
+    return new Promise((resolve) => {
+      let accumulated = '';
+      const xhr = new XMLHttpRequest();
+      let pos = 0;
+      xhr.open('POST', '/api/office/run', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.withCredentials = true;
+      xhr.timeout = 120000;
+      const parse = (chunk) => {
+        for (const line of chunk.split('\n')) {
+          const t = line.trim();
+          if (!t.startsWith('data: ')) continue;
+          const raw = t.slice(6);
+          if (!raw || raw === '{}') continue;
+          try {
+            const ev = JSON.parse(raw);
+            if (ev.error) { resolve(null); return; }
+            if (ev.t) accumulated += ev.t;
+          } catch(e) {}
+        }
+      };
+      xhr.onprogress = () => { const chunk = xhr.responseText.slice(pos); pos = xhr.responseText.length; parse(chunk); };
+      xhr.onload  = () => { parse(xhr.responseText.slice(pos)); resolve(accumulated || null); };
+      xhr.onerror = () => resolve(null);
+      xhr.ontimeout = () => resolve(null);
+      xhr.send(JSON.stringify({
+        employee: this.empId, task_type: 'custom', custom_task: userText,
+        network_context: netCtx, history,
+      }));
+    });
+  },
+
+  toggleMic() {
+    if (this.state === 'listening') {
+      this._stopListening();
+      this.state = 'thinking';
+      this._setStatus('thinking', '— PAUSED');
+    } else if (this.state === 'thinking' || this.state === 'speaking') {
+      // Interrupt AI speech and listen
+      this.synth.cancel();
+      if (this.currentAudio) { this.currentAudio.pause(); this.currentAudio = null; }
+      this._startListening();
+    }
+  },
+
+  toggleMute() {
+    this.muted = !this.muted;
+    const btn = document.getElementById('vc-mute-btn');
+    if (btn) btn.textContent = this.muted ? '🔇' : '🔊';
+    if (this.muted) { this.synth.cancel(); if (this.currentAudio) { this.currentAudio.pause(); this.currentAudio = null; } }
+  },
+
+  toggleAutoRead() {
+    this.autoRead = !this.autoRead;
+    const btn = document.getElementById('vc-autoread-btn');
+    if (btn) btn.classList.toggle('active', this.autoRead);
+  },
+
+  endCall() {
+    this.state = 'idle';
+    this.synth.cancel();
+    if (this.currentAudio) { this.currentAudio.pause(); this.currentAudio = null; }
+    this._stopListening();
+    const ov = document.getElementById('vc-overlay');
+    if (ov) ov.classList.remove('active');
+    this._interimEl = null;
+  },
+
+  // Called from terminal output — read response aloud if auto-read is on
+  async speakResponse(empId, text) {
+    const empAutoReadOn = this.empAutoRead[empId] ?? false;
+    if (!empAutoReadOn || this.state !== 'idle' || this.muted) return;
+    await this._speak(text, empId);
+  },
+};
+
+// Public wrappers used by onclick handlers
+function vcStartCall(empId)         { VC.startCall(empId); }
+function vcEndCall()                { VC.endCall(); }
+function vcToggleMic()              { VC.toggleMic(); }
+function vcToggleMute()             { VC.toggleMute(); }
+function vcToggleAutoRead()         { VC.toggleAutoRead(); }
+function vcToggleAutoReadEmp(empId, btn) {
+  VC.empAutoRead[empId] = !VC.empAutoRead[empId];
+  if (btn) btn.classList.toggle('on', VC.empAutoRead[empId]);
+  btn.title = VC.empAutoRead[empId] ? 'Auto-read ON — click to disable' : 'Auto-read responses aloud';
+}
+
+// Space bar = push to talk
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && document.getElementById('vc-overlay')?.classList.contains('active')) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    if (!VC._spaceHeld) { VC._spaceHeld = true; if (VC.state !== 'listening') VC._startListening(); }
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space' && VC._spaceHeld) {
+    VC._spaceHeld = false;
+    if (VC.state === 'listening') VC._stopListening();
+  }
+  if (e.code === 'Escape') {
+    if (document.getElementById('vc-overlay')?.classList.contains('active')) { vcEndCall(); return; }
+  }
+});
+
+// Initialize VC on load
+window.addEventListener('DOMContentLoaded', () => VC.init());
+window.addEventListener('load', () => { if (!VC.voices.length) VC.init(); });
+
+// ═══════════════════════════════════════════════════════════
+//  VOICE NOTE (VN)
+// ═══════════════════════════════════════════════════════════
+const VN = {
+  recognition: null,
+  recording: false,
+  text: '',
+
+  init() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    this.recognition = new SR();
+    this.recognition.continuous     = true;
+    this.recognition.interimResults = true;
+    this.recognition.lang           = 'en-US';
+    this.recognition.onresult = (e) => {
+      let t = '';
+      for (const r of e.results) t += r[0].transcript + ' ';
+      this.text = t.trim();
+      const el = document.getElementById('vn-transcript');
+      if (el) el.textContent = this.text || 'Listening…';
+    };
+    this.recognition.onend = () => {
+      this.recording = false;
+      const fab = document.getElementById('vn-fab');
+      if (fab) fab.classList.remove('recording');
+    };
+  },
+
+  toggle() {
+    if (!this.recognition) { alert('Speech recognition not supported in this browser (use Chrome/Edge)'); return; }
+    const fab = document.getElementById('vn-fab');
+    const modal = document.getElementById('vn-modal');
+    if (this.recording) {
+      this.recording = false;
+      this.recognition.stop();
+      if (fab) fab.classList.remove('recording');
+    } else {
+      this.recording = true;
+      this.text = '';
+      const el = document.getElementById('vn-transcript');
+      if (el) el.textContent = 'Listening…';
+      if (modal) modal.classList.add('active');
+      if (fab) fab.classList.add('recording');
+      try { this.recognition.start(); } catch(e) { try { this.recognition.stop(); setTimeout(()=>this.recognition.start(),200); } catch(e2){} }
+    }
+  },
+
+  async send() {
+    const text   = this.text.trim();
+    const target = document.getElementById('vn-target')?.value;
+    if (!text) return;
+    if (target) {
+      // Send to employee as a custom task
+      const chatIn = document.getElementById(`emp-${target}-chat-in`);
+      if (chatIn) { chatIn.value = `[Voice Note] ${text}`; officeChatEmployee(target); }
+    }
+    document.getElementById('vn-modal')?.classList.remove('active');
+    const el = document.getElementById('vn-transcript');
+    if (el) el.textContent = 'Tap the mic to start recording…';
+    this.text = '';
+  },
+};
+
+function vnToggle() { VN.toggle(); }
+function vnSend()   { VN.send(); }
+window.addEventListener('DOMContentLoaded', () => VN.init());
+
+// ═══════════════════════════════════════════════════════════
+//  PWA SERVICE WORKER REGISTRATION
+// ═══════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+  });
+}
 </script>
+
+<!-- ══ VOICE CALL OVERLAY ══ -->
+<div id="vc-overlay">
+  <div class="vc-avatar-wrap">
+    <div class="vc-ring vc-ring-1"></div>
+    <div class="vc-ring vc-ring-2"></div>
+    <div class="vc-ring vc-ring-3"></div>
+    <div class="vc-status-ring"></div>
+    <div class="vc-avatar-circle" id="vc-avatar-emoji">🤖</div>
+  </div>
+  <div class="vc-name" id="vc-name">ARIA</div>
+  <div class="vc-role" id="vc-role">NOC Analyst</div>
+  <div class="vc-status-label" id="vc-status-label">Connecting…</div>
+
+  <div class="vc-waveform" id="vc-waveform">
+    <div class="vc-bar"></div><div class="vc-bar"></div><div class="vc-bar"></div>
+    <div class="vc-bar"></div><div class="vc-bar"></div><div class="vc-bar"></div>
+    <div class="vc-bar"></div><div class="vc-bar"></div>
+  </div>
+
+  <div class="vc-transcript" id="vc-transcript"></div>
+
+  <div class="vc-controls">
+    <button class="vc-ctrl-btn" id="vc-mute-btn" onclick="vcToggleMute()" title="Mute / Unmute">🔊</button>
+    <button class="vc-mic-btn" id="vc-mic-btn" onclick="vcToggleMic()" title="Hold to speak / tap to toggle">🎤</button>
+    <button class="vc-end-btn" onclick="vcEndCall()" title="End call">📵</button>
+    <button class="vc-ctrl-btn" id="vc-autoread-btn" onclick="vcToggleAutoRead()" title="Auto-read responses">📖</button>
+  </div>
+
+  <div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:14px;text-align:center" id="vc-hint">
+    Press <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);padding:1px 5px;border-radius:3px">Space</kbd> to speak · <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);padding:1px 5px;border-radius:3px">Esc</kbd> to end call
+  </div>
+</div>
+
+<!-- ══ FLOATING VOICE NOTE BUTTON ══ -->
+<button id="vn-fab" onclick="vnToggle()" title="Voice Note — record a quick message">🎙</button>
+<div id="vn-modal">
+  <div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+    🎙 Voice Note
+    <button onclick="document.getElementById('vn-modal').classList.remove('active')" style="margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px">✕</button>
+  </div>
+  <div id="vn-transcript" style="min-height:50px;font-size:12px;color:var(--text);background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;font-style:italic">
+    Tap the mic to start recording…
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span style="font-size:10px;color:var(--muted)">Send to:</span>
+    <select id="vn-target" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;color:#e0eaff;font-size:11px;outline:none;flex:1">
+      <option value="">— Just save —</option>
+      <option value="aria">ARIA</option>
+      <option value="nexus">NEXUS</option>
+      <option value="cipher">CIPHER</option>
+      <option value="vega">VEGA</option>
+    </select>
+    <button onclick="vnSend()" style="background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:var(--cyan);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer">Send ↵</button>
+  </div>
+</div>
+
 </body>
 </html>

@@ -324,6 +324,21 @@ async def run_migration():
         "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_oauth_access_token`  TEXT",
         "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_oauth_token_expires` BIGINT DEFAULT 0",
         "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_oauth_email`         VARCHAR(200) DEFAULT ''",
+
+        # Per-employee AI provider/model override (null = use global default)
+        "ALTER TABLE `employee_profiles` ADD COLUMN IF NOT EXISTS `ai_provider` VARCHAR(50)  DEFAULT NULL",
+        "ALTER TABLE `employee_profiles` ADD COLUMN IF NOT EXISTS `ai_model`    VARCHAR(200) DEFAULT NULL",
+
+        # Additional AI provider keys
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `groq_key`     VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `deepseek_key` VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `mistral_key`  VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `together_key` VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ollama_url`   VARCHAR(300) DEFAULT 'http://localhost:11434'",
+
+        # Web-session providers (use Claude Pro / ChatGPT Plus subscription — no API billing)
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `claude_web_session`  TEXT DEFAULT NULL",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `chatgpt_web_token`   TEXT DEFAULT NULL",
     ]
     for sql in sqls:
         try:

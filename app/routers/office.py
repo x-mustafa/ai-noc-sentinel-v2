@@ -11,7 +11,7 @@ import json
 import base64
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any, Literal
 
@@ -200,6 +200,28 @@ MODEL_DEFAULTS = {
     "gemini":      "gemini-2.0-flash",
     "grok":        "grok-2-latest",
     "openrouter":  "anthropic/claude-3.5-haiku",
+    "groq":        "llama-3.3-70b-versatile",
+    "deepseek":    "deepseek-chat",
+    "mistral":     "mistral-small-latest",
+    "together":    "meta-llama/Llama-3-70b-chat-hf",
+    "ollama":      "llama3.2",
+    "claude_web":  "claude-3-5-sonnet-20241022",
+    "chatgpt_web": "gpt-4o",
+}
+
+_KEY_MAP = {
+    "claude":      "claude_key",
+    "openai":      "openai_key",
+    "gemini":      "gemini_key",
+    "grok":        "grok_key",
+    "openrouter":  "openrouter_key",
+    "groq":        "groq_key",
+    "deepseek":    "deepseek_key",
+    "mistral":     "mistral_key",
+    "together":    "together_key",
+    "ollama":      "ollama_url",       # value is a URL, not a secret key
+    "claude_web":  "claude_web_session",  # Claude.ai web session cookie
+    "chatgpt_web": "chatgpt_web_token",   # ChatGPT.com access token
 }
 
 
@@ -242,16 +264,22 @@ async def run_task(body: RunTaskBody, session: dict = Depends(get_session)):
     if employee not in DEFAULT_PERSONAS:
         raise HTTPException(400, f"Unknown employee: {employee}")
 
-    # Load AI keys from DB
-    cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-    provider = body.provider or cfg.get("default_ai_provider") or "claude"
-    model    = body.model_id or cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
+    # Load AI keys + per-employee provider/model override from DB
+    cfg     = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+    emp_row = await fetch_one("SELECT ai_provider, ai_model FROM employee_profiles WHERE id=%s", (employee,)) or {}
 
-    key_map = {"claude": "claude_key", "openai": "openai_key",
-               "gemini": "gemini_key", "grok": "grok_key",
-               "openrouter": "openrouter_key"}
-    api_key = cfg.get(key_map.get(provider, "claude_key"), "")
-    if not api_key:
+    # Resolution order: request body → per-employee DB → global default → hardcoded fallback
+    provider = (body.provider if body.provider not in ("", "claude") else None) \
+               or emp_row.get("ai_provider") \
+               or cfg.get("default_ai_provider") \
+               or "claude"
+    model    = body.model_id \
+               or emp_row.get("ai_model") \
+               or cfg.get("default_ai_model") \
+               or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
+
+    api_key = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+    if not api_key and provider != "ollama":
         raise HTTPException(400, f"{provider} API key not configured — go to Settings → AI Providers")
 
     # Load employee profile + assemble system prompt from structured instructions
@@ -440,15 +468,20 @@ async def run_task_sync(body: RunSyncBody):
     if employee not in DEFAULT_PERSONAS:
         raise HTTPException(400, f"Unknown employee: {employee}")
 
-    cfg     = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-    provider = body.provider or cfg.get("default_ai_provider") or "claude"
-    model    = body.model_id or cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
+    cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+    emp_row  = await fetch_one("SELECT ai_provider, ai_model FROM employee_profiles WHERE id=%s", (employee,)) or {}
 
-    key_map = {"claude": "claude_key", "openai": "openai_key",
-               "gemini": "gemini_key", "grok": "grok_key",
-               "openrouter": "openrouter_key"}
-    api_key = cfg.get(key_map.get(provider, "claude_key"), "")
-    if not api_key:
+    provider = (body.provider if body.provider not in ("", "claude") else None) \
+               or emp_row.get("ai_provider") \
+               or cfg.get("default_ai_provider") \
+               or "claude"
+    model    = body.model_id \
+               or emp_row.get("ai_model") \
+               or cfg.get("default_ai_model") \
+               or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
+
+    api_key = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+    if not api_key and provider != "ollama":
         raise HTTPException(400, f"{provider} API key not configured")
 
     persona = await build_employee_system_prompt(employee) or DEFAULT_PERSONAS[employee]
@@ -766,10 +799,7 @@ async def collaborate(body: CollaborateBody, session: dict = Depends(get_session
     provider = body.provider or cfg.get("default_ai_provider") or "claude"
     model    = body.model_id or cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
 
-    key_map = {"claude": "claude_key", "openai": "openai_key",
-               "gemini": "gemini_key", "grok": "grok_key",
-               "openrouter": "openrouter_key"}
-    api_key = cfg.get(key_map.get(provider, "claude_key"), "")
+    api_key = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
     if not api_key:
         raise HTTPException(400, f"{provider} API key not configured — go to Settings → AI Providers")
 
@@ -992,8 +1022,7 @@ async def auto_collab(body: AutoCollabBody, session: dict = Depends(get_session)
     cfg     = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
     provider = body.provider or cfg.get("default_ai_provider") or "claude"
     model    = body.model_id or cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
-    key_map  = {"claude": "claude_key", "openai": "openai_key",
-                "gemini": "gemini_key", "grok": "grok_key"}
+    key_map  = _KEY_MAP
     api_key  = cfg.get(key_map.get(provider, "claude_key"), "")
     if not api_key:
         return {"should_collab": False, "invite": [], "topic": ""}
@@ -1274,16 +1303,11 @@ async def _generate_shift_briefing(employee_id: str, handover_id: int) -> None:
 
         cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
         provider = cfg.get("default_ai_provider") or "claude"
-        key_map  = {"claude": "claude_key", "openai": "openai_key",
-                    "gemini": "gemini_key", "grok": "grok_key", "openrouter": "openrouter_key"}
-        api_key  = cfg.get(key_map.get(provider, "claude_key"), "")
-        if not api_key:
+        api_key  = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+        if not api_key and provider not in ("ollama",):
             return
 
-        model_defaults = {"claude": "claude-haiku-4-5-20251001", "openai": "gpt-4o-mini",
-                          "gemini": "gemini-2.0-flash", "grok": "grok-2-latest",
-                          "openrouter": "anthropic/claude-haiku-4-5"}
-        model   = cfg.get("default_ai_model") or model_defaults.get(provider, "claude-haiku-4-5-20251001")
+        model   = cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-haiku-4-5-20251001")
         persona = await build_employee_system_prompt(employee_id)
         system  = (
             (persona or f"You are {employee_id.upper()}, a NOC AI employee.")
@@ -1335,16 +1359,11 @@ async def _generate_shift_handover(employee_id: str, handover_id: int) -> str:
 
         cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
         provider = cfg.get("default_ai_provider") or "claude"
-        key_map  = {"claude": "claude_key", "openai": "openai_key",
-                    "gemini": "gemini_key", "grok": "grok_key", "openrouter": "openrouter_key"}
-        api_key  = cfg.get(key_map.get(provider, "claude_key"), "")
-        if not api_key:
+        api_key  = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+        if not api_key and provider not in ("ollama",):
             return "[AI key not configured — handover not generated]"
 
-        model_defaults = {"claude": "claude-haiku-4-5-20251001", "openai": "gpt-4o-mini",
-                          "gemini": "gemini-2.0-flash", "grok": "grok-2-latest",
-                          "openrouter": "anthropic/claude-haiku-4-5"}
-        model   = cfg.get("default_ai_model") or model_defaults.get(provider, "claude-haiku-4-5-20251001")
+        model   = cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-haiku-4-5-20251001")
         persona = await build_employee_system_prompt(employee_id)
         system  = (
             (persona or f"You are {employee_id.upper()}, a NOC AI employee.")
@@ -1839,3 +1858,106 @@ async def delete_feedback(feedback_id: int, session: dict = Depends(require_admi
     """Delete a specific feedback entry."""
     await execute("DELETE FROM employee_feedback WHERE id=%s", (feedback_id,))
     return {"ok": True}
+
+
+# ── Per-Employee AI Engine ─────────────────────────────────────────────────────
+
+class EmpAiModelBody(BaseModel):
+    provider: str = ""
+    model:    str = ""
+
+
+@router.patch("/{employee_id}/ai-model")
+async def set_employee_ai_model(
+    employee_id: str,
+    body: EmpAiModelBody,
+    session: dict = Depends(require_operator),
+):
+    """Set (or clear) the AI provider/model override for a specific employee.
+    Pass empty strings to remove the override (employee will use the global default).
+    """
+    emp_id = employee_id.lower()
+    if emp_id not in DEFAULT_PERSONAS:
+        raise HTTPException(400, f"Unknown employee: {emp_id}")
+    provider_val = body.provider.strip() or None
+    model_val    = body.model.strip()    or None
+    await execute(
+        "UPDATE employee_profiles SET ai_provider=%s, ai_model=%s WHERE id=%s",
+        (provider_val, model_val, emp_id),
+    )
+    return {
+        "ok":       True,
+        "employee": emp_id,
+        "provider": provider_val or "(global default)",
+        "model":    model_val    or "(global default)",
+    }
+
+
+@router.get("/{employee_id}/ai-model")
+async def get_employee_ai_model(employee_id: str, session: dict = Depends(get_session)):
+    """Return the per-employee AI provider/model config (with effective values)."""
+    emp_id = employee_id.lower()
+    if emp_id not in DEFAULT_PERSONAS:
+        raise HTTPException(400, f"Unknown employee: {emp_id}")
+    cfg     = await fetch_one("SELECT default_ai_provider, default_ai_model FROM zabbix_config LIMIT 1") or {}
+    emp_row = await fetch_one("SELECT ai_provider, ai_model FROM employee_profiles WHERE id=%s", (emp_id,)) or {}
+    effective_provider = emp_row.get("ai_provider") or cfg.get("default_ai_provider") or "claude"
+    effective_model    = emp_row.get("ai_model")    or cfg.get("default_ai_model")    or MODEL_DEFAULTS.get(effective_provider, "")
+    return {
+        "employee":          emp_id,
+        "provider_override": emp_row.get("ai_provider"),
+        "model_override":    emp_row.get("ai_model"),
+        "effective_provider": effective_provider,
+        "effective_model":   effective_model,
+    }
+
+
+# ─── Voice / TTS ────────────────────────────────────────────
+
+_TTS_VOICES = {
+    "aria":   "nova",    # warm female
+    "nexus":  "onyx",    # deep male
+    "cipher": "shimmer", # cool female
+    "vega":   "echo",    # clear male
+}
+
+class TtsBody(BaseModel):
+    text:     str
+    employee: Optional[str] = "aria"
+    speed:    float = 1.0
+
+
+@router.post("/tts")
+async def text_to_speech(body: TtsBody, session: dict = Depends(get_session)):
+    """Convert text to speech using OpenAI TTS. Returns audio/mpeg."""
+    cfg = await fetch_one(
+        "SELECT openai_key FROM zabbix_config LIMIT 1"
+    ) or {}
+    key = cfg.get("openai_key", "").strip()
+    if not key:
+        raise HTTPException(400, "OpenAI API key not configured — go to Settings → AI Providers")
+
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+    if len(text) > 4096:
+        text = text[:4096]
+
+    voice = _TTS_VOICES.get((body.employee or "aria").lower(), "nova")
+    speed = max(0.25, min(4.0, body.speed))
+
+    async with httpx.AsyncClient(verify=False, timeout=30) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/audio/speech",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": "tts-1", "input": text, "voice": voice, "speed": speed},
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(502, f"OpenAI TTS error {resp.status_code}: {resp.text[:200]}")
+
+    return Response(
+        content=resp.content,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
+    )

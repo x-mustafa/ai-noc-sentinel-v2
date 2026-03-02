@@ -1,0 +1,21 @@
+{
+  "name": "Tabadul NOC Sentinel",
+  "short_name": "NOC Sentinel",
+  "description": "Network Operations Center — AI-powered monitoring and incident management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#04060f",
+  "theme_color": "#00d4ff",
+  "orientation": "any",
+  "icons": [
+    { "src": "/static/logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/static/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["productivity", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    { "name": "Active Alarms", "url": "/#alarms", "description": "View active Zabbix alarms" },
+    { "name": "Incidents",     "url": "/#incidents", "description": "Manage open incidents" },
+    { "name": "AI Employees",  "url": "/#office", "description": "Chat with AI agents" }
+  ]
+}
