@@ -25,7 +25,7 @@ class WorkflowBody(BaseModel):
         "Analyze the current network state and provide a brief status report.",
         max_length=4000,
     )
-    action_type:     Literal["log", "webhook", "zabbix_ack", "email", "teams", "teams_chat", "teams_channel", "whatsapp_group", "whatsapp_dm"] = "log"
+    action_type:     str = "log"   # JSON array string for multi-action e.g. '["log","email"]'
     action_config:   Optional[str] = None
     is_active:       bool = True
 

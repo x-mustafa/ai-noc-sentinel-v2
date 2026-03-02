@@ -2279,55 +2279,61 @@ select.form-inp option{background:#0d1628}
     <textarea id="wf-f-prompt" class="form-inp" rows="4" style="margin-top:6px"
       placeholder="Describe the task in plain language. For alarm-triggered workflows you can use {alarm_name}, {host}, {severity} as placeholders.&#10;&#10;Example: Analyze the alarm &quot;{alarm_name}&quot; on {host} and recommend an immediate action plan."></textarea>
 
-    <!-- Step 5: Result action -->
-    <div class="wf-step-label" style="margin-top:16px">5 · What to do with the result?</div>
+    <!-- Step 5: Result action (multi-select) -->
+    <div class="wf-step-label" style="margin-top:16px">5 · What to do with the result? <span style="color:var(--muted);font-weight:400;font-size:9px">(select multiple)</span></div>
     <div class="wf-action-cards">
-      <div class="wf-ac active" onclick="wfSelectAction('log')" id="wac-log">
+      <div class="wf-ac active" onclick="wfToggleAction('log')" id="wac-log">
         <div class="wf-ac-icon">📝</div>
-        <div class="wf-ac-title">Save to History</div>
-        <div class="wf-ac-desc">Log the AI response</div>
+        <div class="wf-ac-title">History Log</div>
+        <div class="wf-ac-desc">Save to run history</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('webhook')" id="wac-webhook">
+      <div class="wf-ac" onclick="wfToggleAction('incident')" id="wac-incident">
+        <div class="wf-ac-icon">🚨</div>
+        <div class="wf-ac-title">Save to Incidents</div>
+        <div class="wf-ac-desc">Create incident record</div>
+      </div>
+      <div class="wf-ac" onclick="wfToggleAction('webhook')" id="wac-webhook">
         <div class="wf-ac-icon">🔗</div>
         <div class="wf-ac-title">n8n Webhook</div>
         <div class="wf-ac-desc">POST to n8n / any URL</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('zabbix_ack')" id="wac-zabbix_ack">
+      <div class="wf-ac" onclick="wfToggleAction('zabbix_ack')" id="wac-zabbix_ack">
         <div class="wf-ac-icon">✅</div>
         <div class="wf-ac-title">Ack in Zabbix</div>
         <div class="wf-ac-desc">Auto-acknowledge alarm</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('whatsapp_group')" id="wac-whatsapp_group">
+      <div class="wf-ac" onclick="wfToggleAction('whatsapp_group')" id="wac-whatsapp_group">
         <div class="wf-ac-icon">📱</div>
         <div class="wf-ac-title">WhatsApp Group</div>
         <div class="wf-ac-desc">Send result to WA group</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('email')" id="wac-email">
+      <div class="wf-ac" onclick="wfToggleAction('email')" id="wac-email">
         <div class="wf-ac-icon">📧</div>
         <div class="wf-ac-title">Send Email</div>
         <div class="wf-ac-desc">Multi-recipient O365</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('teams')" id="wac-teams">
+      <div class="wf-ac" onclick="wfToggleAction('teams')" id="wac-teams">
         <div class="wf-ac-icon">🔗</div>
         <div class="wf-ac-title">Teams Webhook</div>
         <div class="wf-ac-desc">Incoming webhook URL</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('teams_chat')" id="wac-teams_chat">
+      <div class="wf-ac" onclick="wfToggleAction('teams_chat')" id="wac-teams_chat">
         <div class="wf-ac-icon">💬</div>
         <div class="wf-ac-title">Teams Chat</div>
         <div class="wf-ac-desc">Group chat via Graph</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('teams_channel')" id="wac-teams_channel">
+      <div class="wf-ac" onclick="wfToggleAction('teams_channel')" id="wac-teams_channel">
         <div class="wf-ac-icon">📢</div>
         <div class="wf-ac-title">Teams Channel</div>
         <div class="wf-ac-desc">Channel via Graph API</div>
       </div>
-      <div class="wf-ac" onclick="wfSelectAction('whatsapp_dm')" id="wac-whatsapp_dm">
+      <div class="wf-ac" onclick="wfToggleAction('whatsapp_dm')" id="wac-whatsapp_dm">
         <div class="wf-ac-icon">📩</div>
         <div class="wf-ac-title">WhatsApp DM</div>
         <div class="wf-ac-desc">Direct message via WA</div>
       </div>
     </div>
+    <div id="wf-action-count" style="font-size:10px;color:#a855f7;margin-top:5px;font-weight:600">1 action selected</div>
     <input type="hidden" id="wf-f-action" value="log">
     <div id="wf-action-webhook" style="display:none;margin-top:10px">
       <div style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.5">
@@ -2512,6 +2518,38 @@ select.form-inp option{background:#0d1628}
         </div>
       </div>
       <div style="font-size:9px;color:var(--muted);margin-top:5px">Format: phone without + (e.g. <code style="color:#7de0a0">9647801234567</code>) or full JID copied from the Communications Hub.</div>
+    </div>
+
+    <!-- Incident action config -->
+    <div id="wf-action-incident" style="display:none;margin-top:10px">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+        <b style="color:#f87171">Save to Incidents:</b> Creates an incident record from the AI analysis. Use <code style="color:#fca5a5;font-size:9px">{workflow_name}</code> in the title to include the workflow name.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Incident Title Template</div>
+          <input id="wf-f-inc-title" class="form-inp" placeholder="Workflow: {workflow_name}" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Severity</div>
+          <select id="wf-f-inc-severity" class="form-inp" style="width:100%">
+            <option value="1">1 — Critical</option>
+            <option value="2">2 — High</option>
+            <option value="3" selected>3 — Medium</option>
+            <option value="4">4 — Low</option>
+            <option value="5">5 — Info</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Assign to</div>
+          <select id="wf-f-inc-owner" class="form-inp" style="width:100%">
+            <option value="aria">ARIA — NOC Analyst</option>
+            <option value="nexus">NEXUS — Infra Engineer</option>
+            <option value="cipher">CIPHER — Security</option>
+            <option value="vega">VEGA — SRE</option>
+          </select>
+        </div>
+      </div>
     </div>
 
     <!-- Enable toggle -->
@@ -5748,7 +5786,7 @@ async function loadWorkflows() {
   const empColors = {aria:'#00d4ff',nexus:'#a855f7',cipher:'#ff8c00',vega:'#4ade80'};
   const empNames  = {aria:'ARIA',nexus:'NEXUS',cipher:'CIPHER',vega:'VEGA'};
   const trigIcons = {manual:'🖱️',alarm:'🔔',schedule:'🕐'};
-  const actIcons  = {log:'📝',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
+  const actIcons  = {log:'📝',incident:'🚨',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
   grid.innerHTML = wfs.map(w => {
     const tc = w.trigger_config ? (typeof w.trigger_config==='string'?JSON.parse(w.trigger_config):w.trigger_config) : {};
     let trigDetail = '';
@@ -5770,7 +5808,12 @@ async function loadWorkflows() {
       <div class="wf-meta">
         <span class="wf-badge ${w.trigger_type}">${trigIcons[w.trigger_type]||''} ${w.trigger_type}${trigDetail?' · '+trigDetail:''}</span>
         <span style="font-size:10px;font-weight:700;color:${empColor};background:rgba(255,255,255,0.04);border:1px solid ${empColor}33;padding:2px 6px;border-radius:5px">${empLabel}</span>
-        <span class="wf-badge" style="background:rgba(168,85,247,0.1);color:#a855f7;border-color:rgba(168,85,247,0.25)">${actIcons[w.action_type]||''} ${w.action_type}</span>
+        ${(() => {
+          let types = [];
+          try { types = JSON.parse(w.action_type); if (!Array.isArray(types)) types = [w.action_type]; }
+          catch { types = [w.action_type || 'log']; }
+          return types.map(t => `<span class="wf-badge" style="background:rgba(168,85,247,0.1);color:#a855f7;border-color:rgba(168,85,247,0.25)">${actIcons[t]||''} ${t}</span>`).join('');
+        })()}
       </div>
       ${w.prompt_template ? `<div class="wf-prompt-preview" title="${w.prompt_template.replace(/"/g,'&quot;')}">${w.prompt_template.substring(0,90)}${w.prompt_template.length>90?'…':''}</div>` : ''}
       <div class="wf-actions">
@@ -5798,21 +5841,36 @@ function wfSelectEmp(e) {
   });
   document.getElementById('wf-f-employee').value = e;
 }
-const _WF_ACTION_TYPES = ['log','webhook','zabbix_ack','whatsapp_group','email','teams','teams_chat','teams_channel','whatsapp_dm'];
-function wfSelectAction(a) {
+const _WF_ACTION_TYPES = ['log','incident','webhook','zabbix_ack','whatsapp_group','email','teams','teams_chat','teams_channel','whatsapp_dm'];
+let _wfSelectedActions = new Set(['log']);
+
+function wfToggleAction(a) {
+  if (_wfSelectedActions.has(a)) {
+    _wfSelectedActions.delete(a);
+  } else {
+    _wfSelectedActions.add(a);
+  }
+  // Sync card active states and config panels
   _WF_ACTION_TYPES.forEach(v => {
     const el = document.getElementById(`wac-${v}`);
-    if (el) el.classList.toggle('active', v===a);
-  });
-  document.getElementById('wf-f-action').value = a;
-  _WF_ACTION_TYPES.forEach(v => {
+    if (el) el.classList.toggle('active', _wfSelectedActions.has(v));
     const panel = document.getElementById(`wf-action-${v}`);
-    if (panel) panel.style.display = v===a ? '' : 'none';
+    if (panel) panel.style.display = _wfSelectedActions.has(v) ? '' : 'none';
   });
-  if (a === 'teams')         wfLoadTeamsWebhooks();
-  if (a === 'teams_chat')    wfLoadTeamsChats();
-  if (a === 'teams_channel') wfLoadTeamsList();
+  // Update hidden field (legacy, now stores JSON array)
+  document.getElementById('wf-f-action').value = JSON.stringify([..._wfSelectedActions]);
+  // Update counter badge
+  const n = _wfSelectedActions.size;
+  const el = document.getElementById('wf-action-count');
+  if (el) el.textContent = `${n} action${n===1?'':'s'} selected`;
+  // Trigger loaders when relevant actions are selected
+  if (_wfSelectedActions.has('teams'))         wfLoadTeamsWebhooks();
+  if (_wfSelectedActions.has('teams_chat'))    wfLoadTeamsChats();
+  if (_wfSelectedActions.has('teams_channel')) wfLoadTeamsList();
 }
+
+// Keep backward-compat alias used by old code paths
+function wfSelectAction(a) { wfToggleAction(a); }
 async function wfLoadGroups() {
   const empId  = document.getElementById('wf-f-wa-emp').value;
   const sel    = document.getElementById('wf-f-wa-group');
@@ -5962,12 +6020,8 @@ document.addEventListener('change', e => {
   }
 });
 
-function openCreateWorkflowModal() {
-  _wfEditId = null;
-  document.getElementById('wf-modal-title').textContent = 'New Workflow';
-  document.getElementById('wf-f-name').value = '';
-  document.getElementById('wf-f-prompt').value = '';
-  document.getElementById('wf-f-hostfilter').value = '';
+function _wfResetActionFields() {
+  // Reset all per-action config fields to defaults
   document.getElementById('wf-f-webhook-url').value = '';
   document.getElementById('wf-f-wa-emp').value = 'aria';
   document.getElementById('wf-f-wa-group').innerHTML = '<option value="">— click Load Groups first —</option>';
@@ -5990,13 +6044,39 @@ function openCreateWorkflowModal() {
   document.getElementById('wf-teams-channel-status').textContent = '';
   document.getElementById('wf-f-wa-dm-emp').value = 'aria';
   document.getElementById('wf-f-wa-dm-jid').value = '';
+  document.getElementById('wf-f-inc-title').value = '';
+  document.getElementById('wf-f-inc-severity').value = '3';
+  document.getElementById('wf-f-inc-owner').value = 'aria';
+}
+
+function _wfApplyActionSet(actionSet) {
+  // Apply a Set of selected action types to cards + panels + counter
+  _wfSelectedActions = new Set(actionSet);
+  _WF_ACTION_TYPES.forEach(v => {
+    document.getElementById(`wac-${v}`)?.classList.toggle('active', _wfSelectedActions.has(v));
+    const p = document.getElementById(`wf-action-${v}`);
+    if (p) p.style.display = _wfSelectedActions.has(v) ? '' : 'none';
+  });
+  const n = _wfSelectedActions.size;
+  const el = document.getElementById('wf-action-count');
+  if (el) el.textContent = `${n} action${n===1?'':'s'} selected`;
+  document.getElementById('wf-f-action').value = JSON.stringify([..._wfSelectedActions]);
+}
+
+function openCreateWorkflowModal() {
+  _wfEditId = null;
+  document.getElementById('wf-modal-title').textContent = 'New Workflow';
+  document.getElementById('wf-f-name').value = '';
+  document.getElementById('wf-f-prompt').value = '';
+  document.getElementById('wf-f-hostfilter').value = '';
   document.getElementById('wf-f-active').checked = true;
   document.getElementById('wf-f-cron').value = '0 8 * * *';
   document.getElementById('wf-f-cron').style.display = 'none';
   document.getElementById('wf-f-sched-preset').value = '0 8 * * *';
+  _wfResetActionFields();
   wfSelectTrigger('manual');
   wfSelectEmp('aria');
-  wfSelectAction('log');
+  _wfApplyActionSet(['log']);
   document.getElementById('wf-modal').style.display = 'flex';
 }
 
@@ -6008,8 +6088,9 @@ async function openEditWorkflowModal(id) {
   document.getElementById('wf-f-name').value = wf.name || '';
   document.getElementById('wf-f-prompt').value = wf.prompt_template || '';
   document.getElementById('wf-f-active').checked = !!wf.is_active;
+
+  // Parse trigger config
   const tc = wf.trigger_config ? (typeof wf.trigger_config==='string'?JSON.parse(wf.trigger_config):wf.trigger_config) : {};
-  const ac = wf.action_config  ? (typeof wf.action_config ==='string'?JSON.parse(wf.action_config ):wf.action_config ) : {};
   document.getElementById('wf-f-hostfilter').value = tc.host_filter || '';
   const sevMap = {0:'0',3:'3',4:'4',5:'5'};
   document.getElementById('wf-f-severity-label').value = sevMap[tc.severity_min] || '3';
@@ -6020,63 +6101,76 @@ async function openEditWorkflowModal(id) {
   const isCustom = !presetOpts.includes(cron);
   document.getElementById('wf-f-sched-preset').value = isCustom ? 'custom' : cron;
   document.getElementById('wf-f-cron').style.display = isCustom ? '' : 'none';
-  document.getElementById('wf-f-webhook-url').value = ac.url || '';
-  // Restore WhatsApp group config if any
-  if (wf.action_type === 'whatsapp_group' && ac.group_jid) {
-    document.getElementById('wf-f-wa-emp').value = ac.emp_id || 'aria';
-    const grpSel = document.getElementById('wf-f-wa-group');
-    grpSel.innerHTML = `<option value="${ac.group_jid}">${ac.group_name || ac.group_jid}</option>`;
-    document.getElementById('wf-wa-groups-status').textContent = 'Saved group loaded. You can reload to refresh the list.';
-  } else {
-    document.getElementById('wf-f-wa-emp').value = 'aria';
-    document.getElementById('wf-f-wa-group').innerHTML = '<option value="">— click Load Groups first —</option>';
-    document.getElementById('wf-wa-groups-status').textContent = '';
+
+  // Parse action types (JSON array or legacy single string)
+  let actionTypes;
+  try {
+    actionTypes = JSON.parse(wf.action_type);
+    if (!Array.isArray(actionTypes)) actionTypes = [actionTypes];
+  } catch { actionTypes = [wf.action_type || 'log']; }
+
+  // Parse action_config — nested dict for multi-action, flat dict for legacy
+  const rawAc = wf.action_config ? (typeof wf.action_config==='string'?JSON.parse(wf.action_config):wf.action_config) : {};
+  // Helper: get per-action config, falling back to root for legacy single-action
+  const getCfg = (t) => (rawAc[t] && typeof rawAc[t] === 'object') ? rawAc[t] : rawAc;
+
+  _wfResetActionFields();
+
+  // Restore per-action fields for each saved action type
+  for (const at of actionTypes) {
+    const c = getCfg(at);
+    if (at === 'webhook') {
+      document.getElementById('wf-f-webhook-url').value = c.url || '';
+    } else if (at === 'whatsapp_group') {
+      document.getElementById('wf-f-wa-emp').value = c.emp_id || 'aria';
+      if (c.group_jid) {
+        document.getElementById('wf-f-wa-group').innerHTML =
+          `<option value="${c.group_jid}">${c.group_name || c.group_jid}</option>`;
+        document.getElementById('wf-wa-groups-status').textContent = 'Saved group loaded. Reload to refresh.';
+      }
+    } else if (at === 'email') {
+      document.getElementById('wf-f-email-emp').value     = c.emp_id  || 'aria';
+      document.getElementById('wf-f-email-to').value      = c.to      || '';
+      document.getElementById('wf-f-email-subject').value = c.subject  || '';
+      document.getElementById('wf-f-email-cc').value      = c.cc       || '';
+    } else if (at === 'teams') {
+      document.getElementById('wf-f-teams-emp').value         = c.emp_id     || 'aria';
+      document.getElementById('wf-f-teams-webhook-url').value = c.webhook_url || '';
+      if (c.webhook_url) {
+        document.getElementById('wf-f-teams-webhook').innerHTML =
+          `<option value="${c.webhook_url}">${c.channel || c.webhook_url}</option>`;
+      }
+    } else if (at === 'teams_chat') {
+      document.getElementById('wf-f-teams-chat-emp').value = c.emp_id || 'aria';
+      if (c.chat_id) {
+        document.getElementById('wf-f-teams-chat-id').innerHTML =
+          `<option value="${c.chat_id}" data-name="${(c.chat_name||c.chat_id).replace(/"/g,'&quot;')}">${c.chat_name || c.chat_id}</option>`;
+        document.getElementById('wf-f-teams-chat-name').value = c.chat_name || '';
+        document.getElementById('wf-teams-chat-status').textContent = 'Saved chat loaded. Click Load Chats to refresh.';
+      }
+    } else if (at === 'teams_channel') {
+      document.getElementById('wf-f-teams-channel-emp').value = c.emp_id || 'aria';
+      if (c.team_id && c.channel_id) {
+        document.getElementById('wf-f-teams-channel-team-id').value = c.team_id;
+        document.getElementById('wf-f-teams-channel-team').innerHTML =
+          `<option value="${c.team_id}" data-name="${(c.team_name||'').replace(/"/g,'&quot;')}">${c.team_name || c.team_id}</option>`;
+        document.getElementById('wf-f-teams-channel-id').innerHTML =
+          `<option value="${c.channel_id}" data-name="${(c.chan_name||'').replace(/"/g,'&quot;')}">${c.chan_name || c.channel_id}</option>`;
+        document.getElementById('wf-teams-channel-status').textContent = 'Saved channel loaded. Click Load Teams to refresh.';
+      }
+    } else if (at === 'whatsapp_dm') {
+      document.getElementById('wf-f-wa-dm-emp').value = c.emp_id  || 'aria';
+      document.getElementById('wf-f-wa-dm-jid').value  = c.to_jid  || '';
+    } else if (at === 'incident') {
+      document.getElementById('wf-f-inc-title').value    = c.title    || '';
+      document.getElementById('wf-f-inc-severity').value = String(c.severity || '3');
+      document.getElementById('wf-f-inc-owner').value    = c.owner_id || 'aria';
+    }
   }
-  // Restore email config
-  document.getElementById('wf-f-email-emp').value     = ac.emp_id  || 'aria';
-  document.getElementById('wf-f-email-to').value      = ac.to      || '';
-  document.getElementById('wf-f-email-subject').value = ac.subject  || '';
-  document.getElementById('wf-f-email-cc').value      = ac.cc       || '';
-  // Restore Teams webhook config
-  document.getElementById('wf-f-teams-emp').value         = ac.emp_id     || 'aria';
-  document.getElementById('wf-f-teams-webhook-url').value = ac.webhook_url || '';
-  if (ac.webhook_url) {
-    document.getElementById('wf-f-teams-webhook').innerHTML =
-      `<option value="${ac.webhook_url}">${ac.channel || ac.webhook_url}</option>`;
-  }
-  // Restore Teams Chat (Graph) config
-  document.getElementById('wf-f-teams-chat-emp').value = ac.emp_id || 'aria';
-  if (wf.action_type === 'teams_chat' && ac.chat_id) {
-    document.getElementById('wf-f-teams-chat-id').innerHTML =
-      `<option value="${ac.chat_id}" data-name="${(ac.chat_name||ac.chat_id).replace(/"/g,'&quot;')}">${ac.chat_name || ac.chat_id}</option>`;
-    document.getElementById('wf-f-teams-chat-name').value = ac.chat_name || '';
-    document.getElementById('wf-teams-chat-status').textContent = 'Saved chat loaded. Click Load Chats to refresh.';
-  } else {
-    document.getElementById('wf-f-teams-chat-id').innerHTML = '<option value="">— click Load Chats first —</option>';
-    document.getElementById('wf-f-teams-chat-name').value = '';
-    document.getElementById('wf-teams-chat-status').textContent = '';
-  }
-  // Restore Teams Channel (Graph) config
-  document.getElementById('wf-f-teams-channel-emp').value = ac.emp_id || 'aria';
-  if (wf.action_type === 'teams_channel' && ac.team_id && ac.channel_id) {
-    document.getElementById('wf-f-teams-channel-team-id').value = ac.team_id;
-    document.getElementById('wf-f-teams-channel-team').innerHTML =
-      `<option value="${ac.team_id}" data-name="${(ac.team_name||'').replace(/"/g,'&quot;')}">${ac.team_name || ac.team_id}</option>`;
-    document.getElementById('wf-f-teams-channel-id').innerHTML =
-      `<option value="${ac.channel_id}" data-name="${(ac.chan_name||'').replace(/"/g,'&quot;')}">${ac.chan_name || ac.channel_id}</option>`;
-    document.getElementById('wf-teams-channel-status').textContent = 'Saved channel loaded. Click Load Teams to refresh.';
-  } else {
-    document.getElementById('wf-f-teams-channel-team').innerHTML = '<option value="">— Load Teams first —</option>';
-    document.getElementById('wf-f-teams-channel-id').innerHTML = '<option value="">— Select team first —</option>';
-    document.getElementById('wf-f-teams-channel-team-id').value = '';
-    document.getElementById('wf-teams-channel-status').textContent = '';
-  }
-  // Restore WhatsApp DM config
-  document.getElementById('wf-f-wa-dm-emp').value = ac.emp_id  || 'aria';
-  document.getElementById('wf-f-wa-dm-jid').value  = ac.to_jid  || '';
+
   wfSelectTrigger(wf.trigger_type || 'manual');
   wfSelectEmp(wf.employee_id || 'aria');
-  wfSelectAction(wf.action_type || 'log');
+  _wfApplyActionSet(actionTypes);
   document.getElementById('wf-modal').style.display = 'flex';
 }
 
@@ -6095,73 +6189,76 @@ async function saveWorkflow() {
   } else if (trigger_type === 'schedule') {
     trigger_config = { cron: document.getElementById('wf-f-cron').value.trim() || '0 8 * * *' };
   }
-  const action_type = document.getElementById('wf-f-action').value;
-  let action_config = {};
-  if (action_type === 'webhook') {
-    action_config = { url: document.getElementById('wf-f-webhook-url').value.trim() };
-  } else if (action_type === 'whatsapp_group') {
-    const grpSel  = document.getElementById('wf-f-wa-group');
-    const grpJid  = grpSel.value;
-    const grpName = grpSel.options[grpSel.selectedIndex]?.dataset?.name || grpSel.options[grpSel.selectedIndex]?.text || grpJid;
-    if (!grpJid) { showToast('Select a WhatsApp group first.', 'warn'); return; }
-    action_config = {
-      emp_id:     document.getElementById('wf-f-wa-emp').value,
-      group_jid:  grpJid,
-      group_name: grpName,
-    };
-  } else if (action_type === 'email') {
-    const to = document.getElementById('wf-f-email-to').value.trim();
-    if (!to) { showToast('Enter an email recipient.', 'warn'); return; }
-    const cc = document.getElementById('wf-f-email-cc').value.trim();
-    action_config = {
-      emp_id:  document.getElementById('wf-f-email-emp').value,
-      to,
-      subject: document.getElementById('wf-f-email-subject').value.trim() || 'NOC Sentinel Workflow Result',
-      ...(cc ? { cc } : {}),
-    };
-  } else if (action_type === 'teams') {
-    const webhookUrl = document.getElementById('wf-f-teams-webhook-url').value;
-    if (!webhookUrl) { showToast('Select a Teams channel webhook.', 'warn'); return; }
-    const webhookSel = document.getElementById('wf-f-teams-webhook');
-    const channelName = webhookSel.options[webhookSel.selectedIndex]?.text || '';
-    action_config = {
-      emp_id:      document.getElementById('wf-f-teams-emp').value,
-      webhook_url: webhookUrl,
-      channel:     channelName,
-    };
-  } else if (action_type === 'teams_chat') {
-    const chatSel  = document.getElementById('wf-f-teams-chat-id');
-    const chatId   = chatSel.value;
-    const chatName = chatSel.options[chatSel.selectedIndex]?.dataset?.name || chatSel.options[chatSel.selectedIndex]?.text || chatId;
-    if (!chatId) { showToast('Select a Teams group chat first.', 'warn'); return; }
-    action_config = {
-      emp_id:    document.getElementById('wf-f-teams-chat-emp').value,
-      chat_id:   chatId,
-      chat_name: chatName,
-    };
-  } else if (action_type === 'teams_channel') {
-    const teamSel   = document.getElementById('wf-f-teams-channel-team');
-    const chanSel   = document.getElementById('wf-f-teams-channel-id');
-    const teamId    = document.getElementById('wf-f-teams-channel-team-id').value || teamSel.value;
-    const channelId = chanSel.value;
-    const teamName  = teamSel.options[teamSel.selectedIndex]?.dataset?.name || teamSel.options[teamSel.selectedIndex]?.text || '';
-    const chanName  = chanSel.options[chanSel.selectedIndex]?.dataset?.name || chanSel.options[chanSel.selectedIndex]?.text || '';
-    if (!teamId || !channelId) { showToast('Select a Team and channel first.', 'warn'); return; }
-    action_config = {
-      emp_id:     document.getElementById('wf-f-teams-channel-emp').value,
-      team_id:    teamId,
-      channel_id: channelId,
-      team_name:  teamName,
-      chan_name:  chanName,
-    };
-  } else if (action_type === 'whatsapp_dm') {
-    const jid = document.getElementById('wf-f-wa-dm-jid').value.trim();
-    if (!jid) { showToast('Enter a WhatsApp contact number or JID.', 'warn'); return; }
-    action_config = {
-      emp_id: document.getElementById('wf-f-wa-dm-emp').value,
-      to_jid: jid,
-    };
+  // Build multi-action config — nested dict keyed by action type
+  const selectedActions = [..._wfSelectedActions];
+  if (!selectedActions.length) { showToast('Select at least one action.', 'warn'); return; }
+
+  const action_config = {};
+  for (const at of selectedActions) {
+    if (at === 'log' || at === 'zabbix_ack') {
+      action_config[at] = {};  // no extra config needed
+    } else if (at === 'webhook') {
+      action_config[at] = { url: document.getElementById('wf-f-webhook-url').value.trim() };
+    } else if (at === 'whatsapp_group') {
+      const grpSel  = document.getElementById('wf-f-wa-group');
+      const grpJid  = grpSel.value;
+      if (!grpJid) { showToast('Select a WhatsApp group first.', 'warn'); return; }
+      const grpName = grpSel.options[grpSel.selectedIndex]?.dataset?.name || grpSel.options[grpSel.selectedIndex]?.text || grpJid;
+      action_config[at] = { emp_id: document.getElementById('wf-f-wa-emp').value, group_jid: grpJid, group_name: grpName };
+    } else if (at === 'email') {
+      const to = document.getElementById('wf-f-email-to').value.trim();
+      if (!to) { showToast('Enter an email recipient.', 'warn'); return; }
+      const cc = document.getElementById('wf-f-email-cc').value.trim();
+      action_config[at] = {
+        emp_id: document.getElementById('wf-f-email-emp').value,
+        to,
+        subject: document.getElementById('wf-f-email-subject').value.trim() || 'NOC Sentinel Workflow Result',
+        ...(cc ? { cc } : {}),
+      };
+    } else if (at === 'teams') {
+      const webhookUrl = document.getElementById('wf-f-teams-webhook-url').value;
+      if (!webhookUrl) { showToast('Select a Teams channel webhook.', 'warn'); return; }
+      const wsel = document.getElementById('wf-f-teams-webhook');
+      action_config[at] = {
+        emp_id:      document.getElementById('wf-f-teams-emp').value,
+        webhook_url: webhookUrl,
+        channel:     wsel.options[wsel.selectedIndex]?.text || '',
+      };
+    } else if (at === 'teams_chat') {
+      const chatSel = document.getElementById('wf-f-teams-chat-id');
+      const chatId  = chatSel.value;
+      if (!chatId) { showToast('Select a Teams group chat first.', 'warn'); return; }
+      action_config[at] = {
+        emp_id:    document.getElementById('wf-f-teams-chat-emp').value,
+        chat_id:   chatId,
+        chat_name: chatSel.options[chatSel.selectedIndex]?.dataset?.name || chatSel.options[chatSel.selectedIndex]?.text || chatId,
+      };
+    } else if (at === 'teams_channel') {
+      const teamSel   = document.getElementById('wf-f-teams-channel-team');
+      const chanSel   = document.getElementById('wf-f-teams-channel-id');
+      const teamId    = document.getElementById('wf-f-teams-channel-team-id').value || teamSel.value;
+      const channelId = chanSel.value;
+      if (!teamId || !channelId) { showToast('Select a Team and channel first.', 'warn'); return; }
+      action_config[at] = {
+        emp_id:     document.getElementById('wf-f-teams-channel-emp').value,
+        team_id:    teamId,
+        channel_id: channelId,
+        team_name:  teamSel.options[teamSel.selectedIndex]?.dataset?.name || teamSel.options[teamSel.selectedIndex]?.text || '',
+        chan_name:  chanSel.options[chanSel.selectedIndex]?.dataset?.name || chanSel.options[chanSel.selectedIndex]?.text || '',
+      };
+    } else if (at === 'whatsapp_dm') {
+      const jid = document.getElementById('wf-f-wa-dm-jid').value.trim();
+      if (!jid) { showToast('Enter a WhatsApp contact number or JID.', 'warn'); return; }
+      action_config[at] = { emp_id: document.getElementById('wf-f-wa-dm-emp').value, to_jid: jid };
+    } else if (at === 'incident') {
+      action_config[at] = {
+        title:    document.getElementById('wf-f-inc-title').value.trim() || 'Workflow: {workflow_name}',
+        severity: parseInt(document.getElementById('wf-f-inc-severity').value) || 3,
+        owner_id: document.getElementById('wf-f-inc-owner').value,
+      };
+    }
   }
+
   const body = {
     name,
     description:     '',
@@ -6169,7 +6266,7 @@ async function saveWorkflow() {
     trigger_config:  JSON.stringify(trigger_config),
     employee_id:     document.getElementById('wf-f-employee').value,
     prompt_template: document.getElementById('wf-f-prompt').value.trim(),
-    action_type,
+    action_type:     JSON.stringify(selectedActions),
     action_config:   JSON.stringify(action_config),
     is_active:       document.getElementById('wf-f-active').checked ? 1 : 0,
   };

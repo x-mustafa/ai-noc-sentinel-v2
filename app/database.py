@@ -125,6 +125,10 @@ async def run_migration():
         """ALTER TABLE `workflows`
            MODIFY COLUMN `action_type` VARCHAR(30) DEFAULT 'log'""",
 
+        # Widen further to TEXT to store JSON arrays for multi-action workflows
+        """ALTER TABLE `workflows`
+           MODIFY COLUMN `action_type` TEXT""",
+
         """CREATE TABLE IF NOT EXISTS `ms365_teams_webhooks` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
             `name` VARCHAR(100) NOT NULL UNIQUE,

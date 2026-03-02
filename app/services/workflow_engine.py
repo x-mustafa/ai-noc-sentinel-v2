@@ -265,12 +265,46 @@ async def _get_ai_response(wf: dict, trigger_data: dict) -> str:
 
 
 async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str:
-    action_type = wf.get("action_type") or "log"
-    cfg = {}
+    """Execute one or more actions for a workflow run.
+
+    action_type can be:
+      - A JSON array string:  '["teams_chat","incident"]'
+      - A legacy single string: "log"
+    action_config is a nested dict keyed by action type for multi-action workflows,
+    or a flat dict for legacy single-action workflows.
+    """
+    raw_type = wf.get("action_type") or "log"
     try:
-        cfg = json.loads(wf.get("action_config") or "{}")
+        action_types = json.loads(raw_type)
+        if isinstance(action_types, str):
+            action_types = [action_types]
+    except Exception:
+        action_types = [raw_type]
+
+    raw_cfg: dict = {}
+    try:
+        raw_cfg = json.loads(wf.get("action_config") or "{}")
     except Exception:
         pass
+
+    results = []
+    for action_type in action_types:
+        # Per-action config: use sub-dict if present, else fall back to root (legacy)
+        per_cfg = raw_cfg.get(action_type)
+        cfg = per_cfg if isinstance(per_cfg, dict) else raw_cfg
+        try:
+            result = await _run_single_action(action_type, cfg, wf, trigger_data, ai_response)
+        except Exception as e:
+            result = f"error: {e}"
+        results.append(f"{action_type}: {result}")
+
+    return " | ".join(results)
+
+
+async def _run_single_action(
+    action_type: str, cfg: dict, wf: dict, trigger_data: dict, ai_response: str
+) -> str:
+    """Execute a single action type and return a short status string."""
 
     if action_type == "log":
         logger.info(f"[WF {wf['id']}] {wf['name']}: {ai_response[:200]}")
@@ -290,9 +324,9 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
             async with httpx.AsyncClient(verify=False, timeout=10) as client:
                 resp = await client.post(url, json=body,
                                           headers=cfg.get("headers", {}))
-            return f"webhook: {resp.status_code}"
+            return f"HTTP {resp.status_code}"
         except Exception as e:
-            return f"webhook error: {e}"
+            return f"error: {e}"
 
     elif action_type == "zabbix_ack":
         p = trigger_data.get("problem", {})
@@ -320,9 +354,9 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
                     f"{wa_service}/send/{emp_id}",
                     json={"to": group_jid, "message": msg},
                 )
-            return f"whatsapp_group: HTTP {resp.status_code}"
+            return f"HTTP {resp.status_code}"
         except Exception as e:
-            return f"whatsapp_group error: {e}"
+            return f"error: {e}"
 
     elif action_type == "email":
         from app.services.ms365 import send_email
@@ -336,7 +370,7 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
         cc_list = [c.strip() for c in cc_raw.split(",") if c.strip()] if cc_raw else None
         result = await send_email(to=to_list, subject=subject, body=ai_response,
                                   employee_id=emp_id, cc=cc_list)
-        return f"email: {'sent' if result['ok'] else result.get('error','failed')}"
+        return "sent" if result["ok"] else result.get("error", "failed")
 
     elif action_type == "teams":
         from app.services.ms365 import send_teams_message
@@ -347,7 +381,7 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
             return "error: no Teams webhook URL"
         result = await send_teams_message(webhook_url=webhook_url, message=ai_response,
                                           title=title, employee_id=emp_id)
-        return f"teams: {'sent' if result['ok'] else result.get('error','failed')}"
+        return "sent" if result["ok"] else result.get("error", "failed")
 
     elif action_type == "teams_chat":
         from app.services.ms365 import send_to_chat
@@ -356,7 +390,7 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
         if not chat_id:
             return "error: no Teams chat ID"
         result = await send_to_chat(chat_id=chat_id, message=ai_response, employee_id=emp_id)
-        return f"teams_chat: {'sent' if result['ok'] else result.get('error','failed')}"
+        return "sent" if result["ok"] else result.get("error", "failed")
 
     elif action_type == "teams_channel":
         from app.services.ms365 import send_to_channel
@@ -368,7 +402,7 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
             return "error: no Teams team/channel ID"
         result = await send_to_channel(team_id=team_id, channel_id=channel_id,
                                        message=ai_response, title=title, employee_id=emp_id)
-        return f"teams_channel: {'sent' if result['ok'] else result.get('error','failed')}"
+        return "sent" if result["ok"] else result.get("error", "failed")
 
     elif action_type == "whatsapp_dm":
         emp_id = cfg.get("emp_id", "aria")
@@ -384,11 +418,28 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
                     f"{wa_service}/send/{emp_id}",
                     json={"to": to_jid, "message": msg},
                 )
-            return f"whatsapp_dm: HTTP {resp.status_code}"
+            return f"HTTP {resp.status_code}"
         except Exception as e:
-            return f"whatsapp_dm error: {e}"
+            return f"error: {e}"
 
-    return f"unknown action: {action_type}"
+    elif action_type == "incident":
+        severity  = int(cfg.get("severity", 3))
+        raw_title = cfg.get("title") or f"Workflow: {wf['name']}"
+        title     = raw_title.replace("{workflow_name}", wf["name"])
+        owner_id  = cfg.get("owner_id") or wf.get("employee_id") or "aria"
+        prob      = trigger_data.get("problem", {})
+        hosts     = prob.get("hosts") or []
+        host      = hosts[0] if hosts else None
+        zabbix_id = str(prob.get("eventid") or "") or None
+        inc_id = await execute(
+            "INSERT INTO incidents "
+            "(title, description, owner_id, severity, host, zabbix_event_id, created_by) "
+            "VALUES (%s,%s,%s,%s,%s,%s,'workflow')",
+            (title, ai_response[:2000], owner_id, severity, host, zabbix_id),
+        )
+        return f"created INC-{inc_id:04d}"
+
+    return f"unknown action type"
 
 
 async def trigger_workflow_manually(workflow_id: int) -> dict:
