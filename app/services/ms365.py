@@ -1,9 +1,11 @@
 """
-Microsoft 365 integration via Graph API (app-only / client credentials).
+Microsoft 365 integration via Graph API.
 
-Required Azure App Registration permissions (Application, with admin consent):
-  - Mail.Send        — send emails from the NOC shared mailbox
-  - Mail.ReadWrite   — read + manage inbox
+Supports two auth strategies (tried in order):
+  1. OAuth delegated — if ms365_oauth_refresh_token is stored in DB
+  2. App-only client credentials — using tenant_id/client_id/client_secret
+
+Credentials are read from DB first (set via Settings UI), falling back to .env.
 
 Token endpoint:
   POST https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token
@@ -12,6 +14,7 @@ import asyncio
 import logging
 import time
 from typing import Optional
+from urllib.parse import urlencode
 
 import httpx
 
@@ -32,8 +35,22 @@ _token_cache: dict = {"token": None, "expires_at": 0}
 _token_lock = asyncio.Lock()
 
 
+async def _get_db_config() -> dict:
+    """Read MS365 config columns from the zabbix_config row (DB-first credentials)."""
+    try:
+        from app.database import fetch_one
+        row = await fetch_one("SELECT * FROM zabbix_config LIMIT 1")
+        return row or {}
+    except Exception:
+        return {}
+
+
 async def _get_token() -> str:
-    """Obtain (or return cached) Graph API access token via client credentials."""
+    """Obtain (or return cached) Graph API access token.
+
+    Tries OAuth refresh grant first (if refresh_token stored in DB),
+    then falls back to app-only client_credentials.
+    """
     from app.config import settings
     now = time.time()
 
@@ -43,22 +60,35 @@ async def _get_token() -> str:
 
     # Slow path: refresh under lock so only one coroutine does the actual request
     async with _token_lock:
-        # Re-check inside the lock (another coroutine may have already refreshed)
         if _token_cache["token"] and now < _token_cache["expires_at"] - 300:
             return _token_cache["token"]
 
-        url = (
-            f"https://login.microsoftonline.com/"
-            f"{settings.ms365_tenant_id}/oauth2/v2.0/token"
-        )
-        data = {
-            "grant_type":    "client_credentials",
-            "client_id":     settings.ms365_client_id,
-            "client_secret": settings.ms365_client_secret,
-            "scope":         "https://graph.microsoft.com/.default",
-        }
+        cfg = await _get_db_config()
+        tenant_id     = cfg.get("ms365_tenant_id")     or settings.ms365_tenant_id
+        client_id     = cfg.get("ms365_client_id")     or settings.ms365_client_id
+        client_secret = cfg.get("ms365_client_secret") or settings.ms365_client_secret
+        refresh_token = cfg.get("ms365_oauth_refresh_token") or ""
+
+        base_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+
+        if refresh_token:
+            data = {
+                "grant_type":    "refresh_token",
+                "client_id":     client_id,
+                "client_secret": client_secret,
+                "refresh_token": refresh_token,
+                "scope":         "https://graph.microsoft.com/.default offline_access",
+            }
+        else:
+            data = {
+                "grant_type":    "client_credentials",
+                "client_id":     client_id,
+                "client_secret": client_secret,
+                "scope":         "https://graph.microsoft.com/.default",
+            }
+
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(url, data=data)
+            resp = await client.post(base_url, data=data)
 
         if resp.status_code != 200:
             body = resp.text[:400]
@@ -72,11 +102,30 @@ async def _get_token() -> str:
 
         _token_cache["token"]      = j["access_token"]
         _token_cache["expires_at"] = now + int(j.get("expires_in", 3600))
+
+        # Persist new refresh_token if returned (OAuth rotation)
+        if refresh_token and j.get("refresh_token"):
+            try:
+                from app.database import execute
+                await execute(
+                    "UPDATE zabbix_config SET ms365_oauth_refresh_token=%s, "
+                    "ms365_oauth_access_token=%s, ms365_oauth_token_expires=%s",
+                    (j["refresh_token"], j["access_token"], int(now + int(j.get("expires_in", 3600)))),
+                )
+            except Exception as e:
+                logger.warning(f"[M365] Could not persist refreshed OAuth token: {e}")
+
         return _token_cache["token"]
 
 
+def invalidate_token_cache():
+    """Clear the in-memory token so next request fetches fresh credentials."""
+    _token_cache["token"] = None
+    _token_cache["expires_at"] = 0
+
+
 def _is_configured() -> bool:
-    """Return True only when all four required M365 settings are non-empty."""
+    """Return True when .env has all four required M365 settings (sync fallback)."""
     from app.config import settings
     return bool(
         settings.ms365_tenant_id   and
@@ -84,6 +133,110 @@ def _is_configured() -> bool:
         settings.ms365_client_secret and
         settings.ms365_email
     )
+
+
+async def is_configured_async() -> bool:
+    """Return True when MS365 is configured via DB or .env."""
+    from app.config import settings
+    cfg = await _get_db_config()
+    return bool(
+        (cfg.get("ms365_tenant_id")     or settings.ms365_tenant_id)   and
+        (cfg.get("ms365_client_id")     or settings.ms365_client_id)   and
+        (cfg.get("ms365_client_secret") or settings.ms365_client_secret) and
+        (cfg.get("ms365_email")         or settings.ms365_email)
+    )
+
+
+async def get_ms365_email() -> str:
+    """Return the configured shared mailbox email (DB first, then .env)."""
+    from app.config import settings
+    cfg = await _get_db_config()
+    return cfg.get("ms365_email") or settings.ms365_email or ""
+
+
+# ── OAuth helpers ──────────────────────────────────────────────────────────────
+
+OAUTH_SCOPES = (
+    "Mail.Send Mail.ReadWrite Chat.ReadWrite Chat.Read "
+    "Team.ReadBasic.All ChannelMessage.Send offline_access"
+)
+
+
+def generate_oauth_url(tenant_id: str, client_id: str, redirect_uri: str) -> str:
+    """Build the Microsoft OAuth 2.0 Authorization Code URL."""
+    params = urlencode({
+        "client_id":     client_id,
+        "response_type": "code",
+        "redirect_uri":  redirect_uri,
+        "scope":         OAUTH_SCOPES,
+        "response_mode": "query",
+    })
+    return f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize?{params}"
+
+
+async def exchange_oauth_code(
+    code: str,
+    redirect_uri: str,
+    tenant_id: str,
+    client_id: str,
+    client_secret: str,
+) -> dict:
+    """Exchange authorization code for tokens and persist to DB."""
+    url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    data = {
+        "grant_type":    "authorization_code",
+        "client_id":     client_id,
+        "client_secret": client_secret,
+        "code":          code,
+        "redirect_uri":  redirect_uri,
+        "scope":         OAUTH_SCOPES,
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(url, data=data)
+
+    if resp.status_code != 200:
+        return {"ok": False, "error": f"Token exchange failed: {resp.text[:300]}"}
+
+    j = resp.json()
+    if "access_token" not in j:
+        return {"ok": False, "error": f"No access_token: {j}"}
+
+    access_token  = j["access_token"]
+    refresh_token = j.get("refresh_token", "")
+    expires_at    = int(time.time()) + int(j.get("expires_in", 3600))
+
+    # Get the signed-in user's email via /me
+    oauth_email = ""
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            me = await c.get(
+                f"{GRAPH}/me?$select=mail,userPrincipalName",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if me.status_code == 200:
+                me_data    = me.json()
+                oauth_email = me_data.get("mail") or me_data.get("userPrincipalName") or ""
+    except Exception:
+        pass
+
+    # Persist to DB
+    try:
+        from app.database import execute
+        await execute(
+            "UPDATE zabbix_config SET "
+            "ms365_oauth_refresh_token=%s, ms365_oauth_access_token=%s, "
+            "ms365_oauth_token_expires=%s, ms365_oauth_email=%s",
+            (refresh_token, access_token, expires_at, oauth_email),
+        )
+        # Update in-memory cache
+        _token_cache["token"]      = access_token
+        _token_cache["expires_at"] = expires_at
+        invalidate_token_cache()  # force re-read next time (so DB row is used)
+    except Exception as e:
+        logger.error(f"[M365] Failed to persist OAuth tokens: {e}")
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": True, "oauth_email": oauth_email}
 
 
 # ── Send email via Graph API ───────────────────────────────────────────────────
@@ -100,10 +253,10 @@ async def send_email(
     Send an email from the shared NOC mailbox using Graph API sendMail.
     Requires Mail.Send application permission with admin consent.
     """
-    from app.config import settings
-    if not _is_configured():
-        return {"ok": False, "error": "M365 not configured — set MS365_* variables in .env"}
+    if not await is_configured_async():
+        return {"ok": False, "error": "M365 not configured — set MS365_* credentials in Settings"}
 
+    ms365_email = await get_ms365_email()
     to_list = [to] if isinstance(to, str) else list(to)
     to_list = [t.strip() for t in to_list if t.strip()]
     if not to_list:
@@ -126,7 +279,7 @@ async def send_email(
     message["from"] = {
         "emailAddress": {
             "name":    f"{emp_name} via NOC Sentinel",
-            "address": settings.ms365_email,
+            "address": ms365_email,
         }
     }
 
@@ -146,7 +299,7 @@ async def send_email(
     try:
         token   = await _get_token()
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        url     = f"{GRAPH}/users/{settings.ms365_email}/sendMail"
+        url     = f"{GRAPH}/users/{ms365_email}/sendMail"
 
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(url, json=payload, headers=headers)
@@ -176,15 +329,15 @@ async def get_inbox(limit: int = 20) -> list[dict]:
     Fetch recent emails from the shared NOC mailbox.
     Requires Mail.ReadWrite application permission.
     """
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return []
 
+    ms365_email = await get_ms365_email()
     try:
         token   = await _get_token()
         headers = {"Authorization": f"Bearer {token}"}
         url = (
-            f"{GRAPH}/users/{settings.ms365_email}/mailFolders/inbox/messages"
+            f"{GRAPH}/users/{ms365_email}/mailFolders/inbox/messages"
             f"?$top={min(limit, 50)}"
             f"&$orderby=receivedDateTime desc"
             f"&$select=id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments"
@@ -225,15 +378,15 @@ async def get_email_body(message_id: str) -> dict:
     Fetch the full body of a single email by its Graph message ID.
     Requires Mail.ReadWrite application permission.
     """
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return {"ok": False, "error": "M365 not configured"}
 
+    ms365_email = await get_ms365_email()
     try:
         token   = await _get_token()
         headers = {"Authorization": f"Bearer {token}"}
         url = (
-            f"{GRAPH}/users/{settings.ms365_email}/messages/{message_id}"
+            f"{GRAPH}/users/{ms365_email}/messages/{message_id}"
             f"?$select=id,subject,from,toRecipients,receivedDateTime,"
             f"body,bodyPreview,isRead,hasAttachments"
         )
@@ -271,14 +424,14 @@ async def get_email_body(message_id: str) -> dict:
 
 async def mark_as_read(message_id: str) -> dict:
     """Mark an email as read. Requires Mail.ReadWrite."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return {"ok": False, "error": "M365 not configured"}
 
+    ms365_email = await get_ms365_email()
     try:
         token   = await _get_token()
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        url     = f"{GRAPH}/users/{settings.ms365_email}/messages/{message_id}"
+        url     = f"{GRAPH}/users/{ms365_email}/messages/{message_id}"
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.patch(url, json={"isRead": True}, headers=headers)
         if resp.status_code == 200:
@@ -302,22 +455,22 @@ async def reply_to_email(
     Reply to an existing email thread using Graph API replyAll.
     Requires Mail.Send application permission.
     """
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return {"ok": False, "error": "M365 not configured"}
 
+    ms365_email = await get_ms365_email()
     emp_name = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
 
     try:
         token   = await _get_token()
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        url     = f"{GRAPH}/users/{settings.ms365_email}/messages/{message_id}/reply"
+        url     = f"{GRAPH}/users/{ms365_email}/messages/{message_id}/reply"
         payload = {
             "message": {
                 "from": {
                     "emailAddress": {
                         "name":    f"{emp_name} via NOC Sentinel",
-                        "address": settings.ms365_email,
+                        "address": ms365_email,
                     }
                 }
             },
@@ -346,8 +499,7 @@ async def reply_to_email(
 
 async def list_teams() -> list[dict]:
     """List all teams the app can see. Requires Team.ReadBasic.All."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return []
     try:
         token = await _get_token()
@@ -366,8 +518,7 @@ async def list_teams() -> list[dict]:
 
 async def list_team_channels(team_id: str) -> list[dict]:
     """List channels in a team. Requires Channel.ReadBasic.All."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return []
     try:
         token = await _get_token()
@@ -386,13 +537,13 @@ async def list_team_channels(team_id: str) -> list[dict]:
 
 async def list_chats(limit: int = 50) -> list[dict]:
     """List group chats and meetings. Requires Chat.ReadWrite.All."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return []
+    ms365_email = await get_ms365_email()
     try:
         token = await _get_token()
         url   = (
-            f"{GRAPH}/users/{settings.ms365_email}/chats"
+            f"{GRAPH}/users/{ms365_email}/chats"
             f"?$filter=chatType eq 'group' or chatType eq 'meeting'"
             f"&$select=id,topic,chatType,lastUpdatedDateTime"
             f"&$top={limit}&$orderby=lastUpdatedDateTime desc"
@@ -421,8 +572,7 @@ async def list_chats(limit: int = 50) -> list[dict]:
 
 async def get_chat_messages(chat_id: str, limit: int = 20) -> list[dict]:
     """Get recent messages from a Teams chat. Requires Chat.ReadWrite.All."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return []
     try:
         token = await _get_token()
@@ -457,8 +607,7 @@ async def send_to_chat(
     employee_id: str = "aria",
 ) -> dict:
     """Send a message to a Teams chat via Graph API. Requires Chat.ReadWrite.All."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return {"ok": False, "error": "M365 not configured"}
     emp_name = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
     html_body = message.replace("\n", "<br>") + f"<br><em>— {emp_name} | NOC Sentinel</em>"
@@ -491,8 +640,7 @@ async def send_to_channel(
     employee_id: str = "aria",
 ) -> dict:
     """Send a message to a Teams channel via Graph API. Requires ChannelMessage.Send."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return {"ok": False, "error": "M365 not configured"}
     emp_name = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
     heading  = f"<h3>{title}</h3>" if title else ""
@@ -520,8 +668,7 @@ async def send_to_channel(
 
 async def get_channel_messages(team_id: str, channel_id: str, limit: int = 20) -> list[dict]:
     """Get recent messages from a Teams channel. Requires ChannelMessage.Read.All."""
-    from app.config import settings
-    if not _is_configured():
+    if not await is_configured_async():
         return []
     try:
         token = await _get_token()
@@ -636,24 +783,18 @@ async def test_graph() -> dict:
     Test Graph API token acquisition and mailbox access.
     Requires Mail.ReadWrite application permission.
     """
-    from app.config import settings
-
-    if not _is_configured():
-        missing = []
-        if not settings.ms365_tenant_id:   missing.append("MS365_TENANT_ID")
-        if not settings.ms365_client_id:   missing.append("MS365_CLIENT_ID")
-        if not settings.ms365_client_secret: missing.append("MS365_CLIENT_SECRET")
-        if not settings.ms365_email:        missing.append("MS365_EMAIL")
+    if not await is_configured_async():
         return {
             "ok":    False,
-            "error": f"Missing configuration: {', '.join(missing)}",
+            "error": "MS365 not configured — set credentials in Settings → Microsoft 365",
         }
 
+    ms365_email = await get_ms365_email()
     try:
         token   = await _get_token()
         headers = {"Authorization": f"Bearer {token}"}
         url = (
-            f"{GRAPH}/users/{settings.ms365_email}/mailFolders/inbox"
+            f"{GRAPH}/users/{ms365_email}/mailFolders/inbox"
             f"?$select=id,displayName,totalItemCount"
         )
         async with httpx.AsyncClient(timeout=10) as client:
@@ -663,7 +804,7 @@ async def test_graph() -> dict:
             folder = resp.json()
             return {
                 "ok":          True,
-                "mailbox":     settings.ms365_email,
+                "mailbox":     ms365_email,
                 "inbox_count": folder.get("totalItemCount", "?"),
                 "message":     "Graph API connected — mailbox accessible",
             }

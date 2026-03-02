@@ -314,6 +314,16 @@ async def run_migration():
             `created_at`  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX `idx_ef_emp` (`employee_id`, `event_type`, `event_id`)
         ) ENGINE=InnoDB""",
+
+        # MS365 Settings — stored in DB so admins can set them via the UI
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_tenant_id`           VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_client_id`           VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_client_secret`       VARCHAR(500) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_email`               VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_oauth_refresh_token` TEXT",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_oauth_access_token`  TEXT",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_oauth_token_expires` BIGINT DEFAULT 0",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `ms365_oauth_email`         VARCHAR(200) DEFAULT ''",
     ]
     for sql in sqls:
         try:

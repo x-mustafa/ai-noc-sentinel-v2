@@ -1,7 +1,8 @@
 """
 Microsoft 365 router — Outlook email + Teams messaging via Graph API.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -21,6 +22,11 @@ from app.services.ms365 import (
     send_to_chat,
     send_to_channel,
     get_channel_messages,
+    generate_oauth_url,
+    exchange_oauth_code,
+    invalidate_token_cache,
+    is_configured_async,
+    get_ms365_email,
 )
 from app.database import fetch_all, fetch_one, execute
 
@@ -67,19 +73,164 @@ class SendChannelBody(BaseModel):
     employee_id: str = "aria"
 
 
+class M365ConfigBody(BaseModel):
+    tenant_id:     Optional[str] = None
+    client_id:     Optional[str] = None
+    client_secret: Optional[str] = None   # blank = keep existing
+    email:         Optional[str] = None
+
+
+# ── MS365 Settings (DB-persisted credentials) ──────────────────────────────────
+
+@router.get("/config")
+async def get_m365_config(session: dict = Depends(get_session)):
+    """Return current MS365 config (secrets masked). Admin/operator only."""
+    from app.config import settings
+    row = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+    tenant_id     = row.get("ms365_tenant_id")     or settings.ms365_tenant_id or ""
+    client_id     = row.get("ms365_client_id")     or settings.ms365_client_id or ""
+    client_secret = row.get("ms365_client_secret") or settings.ms365_client_secret or ""
+    email         = row.get("ms365_email")          or settings.ms365_email or ""
+    oauth_token   = row.get("ms365_oauth_refresh_token") or ""
+    oauth_email   = row.get("ms365_oauth_email") or ""
+    return {
+        "tenant_id":        tenant_id,
+        "client_id":        client_id,
+        "client_secret_set": bool(client_secret),
+        "email":            email,
+        "oauth_connected":  bool(oauth_token),
+        "oauth_email":      oauth_email,
+    }
+
+
+@router.post("/config")
+async def save_m365_config(
+    body: M365ConfigBody,
+    session: dict = Depends(require_operator),
+):
+    """Save MS365 app credentials to the database."""
+    row = await fetch_one("SELECT ms365_client_secret FROM zabbix_config LIMIT 1") or {}
+    existing_secret = row.get("ms365_client_secret") or ""
+    secret = body.client_secret if body.client_secret else existing_secret
+
+    updates = []
+    params  = []
+    if body.tenant_id is not None:
+        updates.append("ms365_tenant_id=%s");     params.append(body.tenant_id)
+    if body.client_id is not None:
+        updates.append("ms365_client_id=%s");     params.append(body.client_id)
+    if secret:
+        updates.append("ms365_client_secret=%s"); params.append(secret)
+    if body.email is not None:
+        updates.append("ms365_email=%s");         params.append(body.email)
+
+    if updates:
+        await execute(f"UPDATE zabbix_config SET {', '.join(updates)}", params)
+        invalidate_token_cache()
+
+    return {"ok": True}
+
+
+# ── OAuth 2.0 login flow ───────────────────────────────────────────────────────
+
+@router.get("/oauth/start")
+async def oauth_start(request: Request, session: dict = Depends(get_session)):
+    """Redirect browser to Microsoft OAuth login page."""
+    from app.config import settings
+    row = await fetch_one("SELECT ms365_tenant_id, ms365_client_id FROM zabbix_config LIMIT 1") or {}
+    tenant_id = row.get("ms365_tenant_id") or settings.ms365_tenant_id
+    client_id = row.get("ms365_client_id") or settings.ms365_client_id
+
+    if not tenant_id or not client_id:
+        raise HTTPException(400, "MS365 Tenant ID and Client ID must be saved in Settings first")
+
+    redirect_uri = str(request.base_url).rstrip("/") + "/api/ms365/oauth/callback"
+    url = generate_oauth_url(tenant_id, client_id, redirect_uri)
+    return RedirectResponse(url)
+
+
+@router.get("/oauth/callback")
+async def oauth_callback(request: Request, code: str = "", error: str = ""):
+    """Exchange authorization code for tokens and return a popup-close page."""
+    if error or not code:
+        html = f"""<!DOCTYPE html><html><body>
+<script>window.opener&&window.opener.postMessage({{type:'ms365_oauth_error',error:{repr(error)}}}, '*');window.close();</script>
+<p>OAuth error: {error or 'No code received'}. You may close this window.</p>
+</body></html>"""
+        return HTMLResponse(html)
+
+    from app.config import settings
+    row = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+    tenant_id     = row.get("ms365_tenant_id")     or settings.ms365_tenant_id
+    client_id     = row.get("ms365_client_id")     or settings.ms365_client_id
+    client_secret = row.get("ms365_client_secret") or settings.ms365_client_secret
+
+    redirect_uri = str(request.base_url).rstrip("/") + "/api/ms365/oauth/callback"
+    result = await exchange_oauth_code(
+        code=code,
+        redirect_uri=redirect_uri,
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+    )
+
+    if not result.get("ok"):
+        html = f"""<!DOCTYPE html><html><body>
+<script>window.opener&&window.opener.postMessage({{type:'ms365_oauth_error',error:{repr(result.get('error','Unknown error'))}}}, '*');window.close();</script>
+<p>Login failed: {result.get('error')}. You may close this window.</p>
+</body></html>"""
+        return HTMLResponse(html)
+
+    email = result.get("oauth_email", "")
+    html = f"""<!DOCTYPE html><html><head><title>Signed In</title></head><body>
+<p style="font-family:sans-serif;padding:20px">✓ Signed in as <strong>{email}</strong>. Closing...</p>
+<script>
+  if (window.opener) {{
+    window.opener.postMessage({{type:'ms365_oauth_done',email:{repr(email)}}}, '*');
+  }}
+  setTimeout(()=>window.close(), 1500);
+</script>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+@router.get("/oauth/status")
+async def oauth_status(session: dict = Depends(get_session)):
+    """Return OAuth connection status."""
+    row = await fetch_one("SELECT ms365_oauth_refresh_token, ms365_oauth_email FROM zabbix_config LIMIT 1") or {}
+    oauth_token = row.get("ms365_oauth_refresh_token") or ""
+    oauth_email = row.get("ms365_oauth_email") or ""
+    configured  = await is_configured_async()
+    return {
+        "connected":     bool(oauth_token),
+        "oauth_email":   oauth_email,
+        "has_app_creds": configured,
+    }
+
+
+@router.delete("/oauth/disconnect")
+async def oauth_disconnect(session: dict = Depends(require_operator)):
+    """Remove stored OAuth tokens (disconnect delegated login)."""
+    await execute(
+        "UPDATE zabbix_config SET ms365_oauth_refresh_token=NULL, "
+        "ms365_oauth_access_token=NULL, ms365_oauth_email=''",
+    )
+    invalidate_token_cache()
+    return {"ok": True}
+
+
 # ── Status / Test ──────────────────────────────────────────────────────────────
 
 @router.get("/status")
 async def m365_status(session: dict = Depends(get_session)):
     """Test Graph API connectivity and return configuration status."""
-    from app.config import settings
     result = await test_graph()
+    email  = await get_ms365_email()
     return {
         "graph":      result,
         "ok":         result.get("ok", False),
-        "email":      settings.ms365_email or "(not configured)",
+        "email":      email or "(not configured)",
         "configured": result.get("ok", False),
-        # Surface the fix guide directly so the frontend can display it
         "error":      result.get("error", "") if not result.get("ok") else "",
         "hint":       result.get("hint", ""),
         "setup_guide": (
@@ -87,7 +238,7 @@ async def m365_status(session: dict = Depends(get_session)):
             "  1. Azure Portal → App Registrations → [app] → API Permissions\n"
             "  2. Add application permissions: Mail.Send + Mail.ReadWrite\n"
             "  3. Grant admin consent (Global Admin required)\n"
-            "  4. Set MS365_TENANT_ID, MS365_CLIENT_ID, MS365_CLIENT_SECRET, MS365_EMAIL in .env"
+            "  4. Set credentials in Settings → Microsoft 365 section"
         ) if not result.get("ok") else "",
     }
 

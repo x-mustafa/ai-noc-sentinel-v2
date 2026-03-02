@@ -1650,6 +1650,31 @@ select.form-inp option{background:#0d1628}
       <!-- Legacy Claude key input (kept for map import compatibility) -->
       <div id="claude-key-status" style="display:none"></div>
 
+      <!-- Microsoft 365 Settings -->
+      <div class="settings-card">
+        <h3 style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:14px">☁️</span> Microsoft 365 / Graph API
+        </h3>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">
+          App-only credentials for shared mailbox &amp; Teams (client credentials flow). Or sign in interactively with a personal Microsoft account (OAuth delegated flow).
+        </p>
+        <div class="ef"><label>Tenant ID</label><input id="m365-tenant-id" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" spellcheck="false"></div>
+        <div class="ef"><label>Client ID</label><input id="m365-client-id" type="text" placeholder="App registration client ID" autocomplete="off" spellcheck="false"></div>
+        <div class="ef"><label>Client Secret</label><input id="m365-client-secret" type="password" placeholder="Leave blank to keep existing secret" autocomplete="new-password"></div>
+        <div class="ef"><label>Shared Mailbox Email</label><input id="m365-email" type="email" placeholder="noc@company.com"></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px">
+          <button class="btn btn-primary" onclick="saveM365Config()">Save App Credentials</button>
+          <button class="btn" id="m365-oauth-btn" onclick="startM365OAuth()" style="background:var(--surface2);border:1px solid #2196f3;color:#2196f3;font-size:12px">
+            🔐 Sign in with Microsoft
+          </button>
+          <button class="btn btn-ghost" id="m365-oauth-disconnect" onclick="disconnectM365OAuth()" style="display:none;font-size:11px;color:var(--muted)">Disconnect OAuth</button>
+          <div id="m365-result" style="font-size:11px;font-family:'JetBrains Mono',monospace"></div>
+        </div>
+        <div id="m365-oauth-status" style="margin-top:10px;font-size:11px;display:none">
+          <span id="m365-oauth-badge" style="padding:3px 10px;border-radius:4px;font-family:'JetBrains Mono',monospace"></span>
+        </div>
+      </div>
+
       <!-- Saved layouts -->
       <div class="settings-card">
         <h3>Saved Layouts</h3>
@@ -3955,6 +3980,8 @@ async function loadSettingsData(){
   }
   // Load AI provider keys
   await loadAiKeys();
+  // Load MS365 config
+  await loadM365Config();
 }
 
 // ── USER MANAGEMENT ────────────────────────────────────────
@@ -7872,6 +7899,94 @@ async function saveAiKeys() {
 }
 
 // loadAiKeys() is now called directly from loadSettingsData() above
+
+// ═══════════════════════════════════════════════════════════
+//  MICROSOFT 365 SETTINGS
+// ═══════════════════════════════════════════════════════════
+
+async function loadM365Config() {
+  const r = await api('/api/ms365/config');
+  if (!r) return;
+  const el = id => document.getElementById(id);
+  if (el('m365-tenant-id')) el('m365-tenant-id').value = r.tenant_id || '';
+  if (el('m365-client-id')) el('m365-client-id').value  = r.client_id  || '';
+  if (el('m365-email'))     el('m365-email').value       = r.email      || '';
+  // Client secret placeholder — never prefill, just hint
+  const secInput = el('m365-client-secret');
+  if (secInput) secInput.placeholder = r.client_secret_set ? '(saved — leave blank to keep)' : 'Enter client secret';
+
+  // OAuth status badge
+  const badge      = el('m365-oauth-badge');
+  const statusDiv  = el('m365-oauth-status');
+  const discBtn    = el('m365-oauth-disconnect');
+  if (badge && statusDiv) {
+    statusDiv.style.display = '';
+    if (r.oauth_connected) {
+      badge.textContent = `✓ Signed in as ${r.oauth_email || 'Microsoft Account'}`;
+      badge.style.cssText = 'background:rgba(0,230,118,0.12);color:#00e676;padding:3px 10px;border-radius:4px;font-family:"JetBrains Mono",monospace';
+      if (discBtn) discBtn.style.display = '';
+    } else {
+      badge.textContent = 'Not signed in with Microsoft (using app credentials)';
+      badge.style.cssText = 'background:rgba(255,255,255,0.05);color:var(--muted);padding:3px 10px;border-radius:4px;font-family:"JetBrains Mono",monospace';
+      if (discBtn) discBtn.style.display = 'none';
+    }
+  }
+}
+
+async function saveM365Config() {
+  const getVal = id => document.getElementById(id)?.value?.trim() || null;
+  const body = {
+    tenant_id:     getVal('m365-tenant-id'),
+    client_id:     getVal('m365-client-id'),
+    client_secret: getVal('m365-client-secret') || '',
+    email:         getVal('m365-email'),
+  };
+  const res = document.getElementById('m365-result');
+  if (res) res.textContent = 'Saving...';
+  const r = await api('/api/ms365/config', {method:'POST', body:JSON.stringify(body)});
+  if (r?.ok) {
+    if (res) { res.style.color='#00e676'; res.textContent='✓ Credentials saved'; setTimeout(()=>res.textContent='',3000); }
+    const secInput = document.getElementById('m365-client-secret');
+    if (secInput) { secInput.value = ''; secInput.placeholder = '(saved — leave blank to keep)'; }
+    await loadM365Config();
+  } else {
+    if (res) { res.style.color='#ff4444'; res.textContent='Error saving credentials'; }
+  }
+}
+
+function startM365OAuth() {
+  const res = document.getElementById('m365-result');
+  const popup = window.open('/api/ms365/oauth/start', 'ms365_oauth',
+    'width=520,height=680,scrollbars=yes,resizable=yes,left=200,top=100');
+  if (!popup) {
+    if (res) { res.style.color='#ff4444'; res.textContent='Popup blocked — allow popups for this page'; }
+    return;
+  }
+  if (res) { res.style.color='var(--muted)'; res.textContent='Waiting for login...'; }
+  const handler = async (e) => {
+    if (e.data?.type === 'ms365_oauth_done') {
+      window.removeEventListener('message', handler);
+      if (res) { res.style.color='#00e676'; res.textContent=`✓ Signed in as ${e.data.email}`; setTimeout(()=>res.textContent='',4000); }
+      await loadM365Config();
+    } else if (e.data?.type === 'ms365_oauth_error') {
+      window.removeEventListener('message', handler);
+      if (res) { res.style.color='#ff4444'; res.textContent=`OAuth error: ${e.data.error}`; }
+    }
+  };
+  window.addEventListener('message', handler);
+}
+
+async function disconnectM365OAuth() {
+  if (!confirm('Disconnect Microsoft OAuth login? App credentials will still work.')) return;
+  const r = await api('/api/ms365/oauth/disconnect', {method:'DELETE'});
+  const res = document.getElementById('m365-result');
+  if (r?.ok) {
+    if (res) { res.style.color='var(--muted)'; res.textContent='OAuth disconnected'; setTimeout(()=>res.textContent='',3000); }
+    await loadM365Config();
+  } else {
+    if (res) { res.style.color='#ff4444'; res.textContent='Disconnect failed'; }
+  }
+}
 </script>
 </body>
 </html>
