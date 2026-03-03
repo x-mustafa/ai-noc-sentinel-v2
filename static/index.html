@@ -31,6 +31,124 @@
   --glass:rgba(11,17,32,0.82);
   --glow-cyan:0 0 18px rgba(0,212,255,0.22);
 }
+
+/* ── LIGHT THEME ── */
+body.light{
+  --bg:#f0f4fa; --surface:#fff; --surface2:#f5f8fd; --surface3:#eef2f9;
+  --border:#d0daea; --border2:#bccadf;
+  --text:#1a2a3a; --muted:#6a85a0; --bright:#000;
+  --glass:rgba(255,255,255,0.88);
+  --glow-cyan:0 0 18px rgba(0,150,200,0.18);
+}
+body.light #sidebar{background:linear-gradient(180deg,#e8eef9 0%,#dde5f4 100%)}
+body.light .sidebar-logo{background:none}
+body.light .nav-item:hover{background:rgba(0,150,200,0.1)}
+body.light .nav-item.active{background:rgba(0,150,200,0.14);color:#007aad}
+body.light #topbar{background:rgba(255,255,255,0.92)}
+body.light .stat-chip{background:rgba(0,0,0,0.06);border-color:var(--border)}
+body.light .page{background:var(--bg)}
+body.light .card,body.light .settings-card{background:#fff;border-color:var(--border)}
+
+/* ── THEME TOGGLE BUTTON ── */
+#theme-toggle{
+  background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);
+  color:var(--text);font-size:14px;width:30px;height:30px;border-radius:8px;
+  cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+#theme-toggle:hover{background:rgba(0,212,255,0.15);border-color:rgba(0,212,255,0.5)}
+
+/* ── SITE SELECTOR ── */
+#site-sel{
+  background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.18);
+  color:var(--text);font-size:10px;font-family:'JetBrains Mono',monospace;
+  padding:4px 8px;border-radius:7px;cursor:pointer;max-width:140px;
+}
+#site-sel:focus{outline:none;border-color:rgba(0,212,255,0.5)}
+
+/* ── HAMBURGER (mobile) ── */
+#hamburger{
+  display:none;background:none;border:1px solid var(--border);
+  color:var(--text);font-size:16px;width:30px;height:30px;border-radius:7px;
+  cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;
+}
+/* ── SIDEBAR OVERLAY (mobile) ── */
+#sidebar-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9;
+}
+
+/* ── ALERT RULES PAGE ── */
+#page-alert-rules{flex-direction:column;overflow:hidden}
+.ar-header{display:flex;align-items:center;gap:10px;padding:14px 18px 12px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.ar-title{font-size:16px;font-weight:700;color:#fff}
+#ar-table-wrap{flex:1;overflow-y:auto;padding:16px 18px}
+.ar-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.ar-tbl th{background:var(--surface2);color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.7px;padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.ar-tbl td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.ar-tbl tr:hover td{background:var(--surface2)}
+.ar-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;font-family:'JetBrains Mono',monospace;text-transform:uppercase}
+.ar-badge-on{background:rgba(0,230,118,0.1);color:var(--green);border:1px solid rgba(0,230,118,0.25)}
+.ar-badge-off{background:rgba(90,120,150,0.1);color:var(--muted);border:1px solid var(--border)}
+
+/* Alert rule modal */
+#ar-modal{display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+#ar-modal.active{display:flex}
+.ar-modal-box{background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(560px,96vw);padding:24px;display:flex;flex-direction:column;gap:14px}
+.ar-modal-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px}
+.ar-form-row{display:flex;gap:10px;flex-wrap:wrap}
+.ar-form-row label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px}
+.ar-form-row input,.ar-form-row select,.ar-form-row textarea{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  font-size:12px;padding:7px 10px;border-radius:7px;
+}
+.ar-form-row textarea{resize:vertical;min-height:60px}
+
+/* ── SITES PAGE ── */
+#page-sites{flex-direction:column;overflow:hidden}
+.sites-header{display:flex;align-items:center;gap:10px;padding:14px 18px 12px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+#sites-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:18px;overflow-y:auto;flex:1}
+.site-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;transition:border-color 0.15s}
+.site-card:hover{border-color:var(--border2)}
+.site-card-top{display:flex;align-items:center;gap:10px}
+.site-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.site-name{font-size:13px;font-weight:600;color:#fff;flex:1}
+.site-url{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site-actions{display:flex;gap:6px;margin-top:4px}
+
+/* Site modal */
+#site-modal{display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+#site-modal.active{display:flex}
+.site-modal-box{background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(480px,96vw);padding:24px;display:flex;flex-direction:column;gap:14px}
+
+/* ── ZABBIX SCRIPTS MODAL ── */
+#zbx-scripts-modal{display:none;position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+#zbx-scripts-modal.active{display:flex}
+.zbx-scripts-box{background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:min(540px,96vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+.zbx-scripts-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.zbx-scripts-list{flex:1;overflow-y:auto;padding:10px}
+.zbx-script-item{padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:7px;cursor:pointer;transition:all 0.15s}
+.zbx-script-item:hover{border-color:var(--cyan);background:rgba(0,212,255,0.04)}
+.zbx-script-name{font-size:12px;font-weight:600;color:#fff}
+.zbx-script-desc{font-size:10px;color:var(--muted);margin-top:3px}
+.zbx-scripts-result{padding:12px 18px;border-top:1px solid var(--border);font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--green);flex-shrink:0;max-height:120px;overflow-y:auto;display:none}
+
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:768px){
+  #hamburger{display:flex}
+  #sidebar{position:fixed;top:0;left:0;height:100vh;z-index:10;transform:translateX(-100%);transition:transform 0.25s var(--easing)}
+  #sidebar.open{transform:translateX(0)}
+  #sidebar-overlay.open{display:block}
+  #main-area{width:100%;flex:1}
+  #topbar{gap:6px;padding:0 10px}
+  .stat-chip .stat-lbl{display:none}
+  #site-sel{max-width:90px}
+  .topbar-title{font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #ar-table-wrap{padding:10px}
+  #sites-grid{grid-template-columns:1fr;padding:10px}
+  .sla-body{flex-direction:column}
+  .sla-events-panel{min-width:unset;width:100%}
+}
+
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:'Space Grotesk','Inter',sans-serif;height:100vh;display:flex;overflow:hidden;font-size:13px;line-height:1.5}
 h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.3px}
@@ -1560,6 +1678,7 @@ select.form-inp option{background:#0d1628}
   </div>
 </div>
 
+<div id="sidebar-overlay" onclick="toggleSidebar()"></div>
 <!-- ══ SIDEBAR ══ -->
 <div id="sidebar">
   <div class="sidebar-logo">
@@ -1631,6 +1750,14 @@ select.form-inp option{background:#0d1628}
       <span class="nav-icon"><i data-lucide="calendar-clock" style="width:16px;height:16px"></i></span>
       <span class="nav-label">Change Calendar</span>
     </div>
+    <div class="nav-item" data-page="alert-rules" onclick="navigate('alert-rules')">
+      <span class="nav-icon"><i data-lucide="zap" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Alert Rules</span>
+    </div>
+    <div class="nav-item" data-page="sites" onclick="navigate('sites')">
+      <span class="nav-icon"><i data-lucide="globe" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Zabbix Sites</span>
+    </div>
 
     <!-- EXTERNAL DASHBOARDS -->
     <div class="ext-section-hdr">Dashboards</div>
@@ -1691,7 +1818,10 @@ select.form-inp option{background:#0d1628}
     <div class="stat-chip"><div class="stat-dot" style="background:var(--red)"></div><span class="stat-num" id="sc-prob">—</span><span class="stat-lbl">problems</span></div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--yellow)"></div><span class="stat-num" id="sc-alarms">—</span><span class="stat-lbl">alarms</span></div>
     <div class="refresh-info" id="refresh-info">Connecting...</div>
+    <select id="site-sel" title="Switch Zabbix site" onchange="switchSite(this.value)"><option value="">— Default Site —</option></select>
     <button class="tv-mode-btn" onclick="toggleTvMode()" title="NOC TV Wall Mode — press Escape to exit">📺 TV</button>
+    <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light theme">🌙</button>
+    <button id="hamburger" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
     <div class="live-pill"><div class="live-dot"></div>LIVE</div>
   </div>
 
@@ -1774,6 +1904,7 @@ select.form-inp option{background:#0d1628}
       <div class="tb-sep"></div>
       <button class="filter-btn" onclick="filterAlarms('unack',this)">🔕 Unacknowledged</button>
       <button class="tb-btn" onclick="refreshAlarms()" style="margin-left:auto">↺ Refresh</button>
+      <button class="btn" onclick="openZbxScriptsModal()" style="font-size:11px;padding:5px 12px;background:rgba(187,134,252,0.07);border:1px solid rgba(187,134,252,0.25);color:var(--purple)">⚡ Scripts</button>
     </div>
     <div class="alarms-table-wrap">
       <table class="alarms-tbl">
@@ -2736,6 +2867,7 @@ select.form-inp option{background:#0d1628}
       <button class="filter-btn" id="inc-filter-all" onclick="incFilterSet('all',this)">All Active</button>
       <div class="tb-sep"></div>
       <button class="tb-btn" onclick="loadIncidents()" style="margin-left:0">↺ Refresh</button>
+      <button class="btn" onclick="downloadPdf('incidents')" style="font-size:11px;padding:5px 12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);color:var(--cyan)">⬇ PDF</button>
       <button class="tb-btn add" onclick="toggleCreateIncident()">+ New Incident</button>
     </div>
 
@@ -2856,6 +2988,7 @@ select.form-inp option{background:#0d1628}
       <button class="tb-btn" onclick="loadSla()" style="margin-left:0">↺ Refresh</button>
       <button class="btn btn-primary" onclick="openSlaModal('add-service')" style="font-size:11px;padding:5px 14px">+ Add Service</button>
       <button class="btn" onclick="openSlaModal('log-event')" style="font-size:11px;padding:5px 14px;background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.3);color:var(--yellow)">⚡ Log Event</button>
+      <button class="btn" onclick="downloadPdf('sla')" style="font-size:11px;padding:5px 14px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);color:var(--cyan)">⬇ Export PDF</button>
     </div>
     <div class="sla-body">
       <div class="sla-cards" id="sla-cards">
@@ -3169,6 +3302,158 @@ select.form-inp option{background:#0d1628}
       <button onclick="closeChModal()" style="padding:7px 18px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-size:12px">Cancel</button>
       <button onclick="submitChange()" class="btn btn-primary" style="font-size:12px;padding:7px 18px">Save Change Window</button>
     </div>
+  </div>
+</div>
+
+<!-- ══ ALERT RULES PAGE ══ -->
+<div class="page" id="page-alert-rules">
+  <div class="ar-header">
+    <div class="ar-title">⚡ Alert Rules Engine</div>
+    <div style="font-size:11px;color:var(--muted)">Auto-route alarms to employees, Teams, email, or incidents</div>
+    <div style="flex:1"></div>
+    <button class="tb-btn" onclick="loadAlertRules()">↺ Refresh</button>
+    <button class="btn btn-primary" onclick="openArModal()" style="font-size:11px;padding:5px 14px">+ New Rule</button>
+  </div>
+  <div id="ar-table-wrap">
+    <table class="ar-tbl" id="ar-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Condition</th>
+          <th>Action</th>
+          <th>Cooldown</th>
+          <th>Priority</th>
+          <th>Fired</th>
+          <th>Enabled</th>
+          <th style="width:100px"></th>
+        </tr>
+      </thead>
+      <tbody id="ar-tbody">
+        <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Alert Rule Modal -->
+<div id="ar-modal">
+  <div class="ar-modal-box">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="ar-modal-title" id="ar-modal-title">New Alert Rule</div>
+      <button onclick="closeArModal()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div class="ar-form-row">
+      <label>Rule Name<input id="ar-f-name" placeholder="e.g. Critical on VISA-GW → Cipher"></label>
+    </div>
+    <div class="ar-form-row">
+      <label>Condition Field
+        <select id="ar-f-field">
+          <option value="severity">severity (0–5)</option>
+          <option value="name">name (alarm title)</option>
+          <option value="hostname">hostname</option>
+        </select>
+      </label>
+      <label>Operator
+        <select id="ar-f-op">
+          <option value="eq">= equals</option>
+          <option value="ne">≠ not equals</option>
+          <option value="ge">≥ greater or equal</option>
+          <option value="gt">&gt; greater than</option>
+          <option value="le">≤ less or equal</option>
+          <option value="lt">&lt; less than</option>
+          <option value="contains">contains</option>
+          <option value="not_contains">not contains</option>
+        </select>
+      </label>
+      <label>Value<input id="ar-f-val" placeholder="e.g. 5 or VISA-GW"></label>
+    </div>
+    <div class="ar-form-row">
+      <label>Action
+        <select id="ar-f-action" onchange="arActionChanged()">
+          <option value="assign_employee">Assign to AI Employee</option>
+          <option value="send_teams">Send Teams webhook</option>
+          <option value="send_email">Send Email (M365)</option>
+          <option value="create_incident">Create Incident</option>
+          <option value="suppress">Suppress (do nothing)</option>
+        </select>
+      </label>
+      <label>Priority (lower = first)<input id="ar-f-priority" type="number" value="100" min="1" max="999"></label>
+      <label>Cooldown (min)<input id="ar-f-cooldown" type="number" value="60" min="1"></label>
+    </div>
+    <div id="ar-action-extra" style="display:flex;flex-direction:column;gap:10px">
+      <!-- Dynamically populated based on action -->
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">
+      <button onclick="closeArModal()" class="btn btn-ghost" style="font-size:12px">Cancel</button>
+      <button onclick="saveAlertRule()" class="btn btn-primary" style="font-size:12px">Save Rule</button>
+    </div>
+    <div id="ar-modal-result" style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--cyan);text-align:center"></div>
+  </div>
+</div>
+
+<!-- ══ SITES PAGE ══ -->
+<div class="page" id="page-sites">
+  <div class="sites-header">
+    <div style="font-size:16px;font-weight:700;color:#fff">🌐 Zabbix Sites</div>
+    <div style="font-size:11px;color:var(--muted)">Manage multiple Zabbix instances</div>
+    <div style="flex:1"></div>
+    <button class="tb-btn" onclick="loadSites()">↺ Refresh</button>
+    <button class="btn btn-primary" onclick="openSiteModal()" style="font-size:11px;padding:5px 14px">+ Add Site</button>
+  </div>
+  <div id="sites-grid">
+    <div style="color:var(--muted);font-size:12px;text-align:center;padding:40px">Loading…</div>
+  </div>
+</div>
+
+<!-- Site Modal -->
+<div id="site-modal">
+  <div class="site-modal-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="font-size:15px;font-weight:700;color:#fff" id="site-modal-title">Add Zabbix Site</div>
+      <button onclick="closeSiteModal()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div class="ar-form-row">
+      <label style="flex:1">Site Name<input id="site-f-name" placeholder="e.g. Data Center 2"></label>
+      <label style="width:80px">Color<input id="site-f-color" type="color" value="#00d4ff" style="height:36px;padding:2px"></label>
+    </div>
+    <div class="ar-form-row">
+      <label style="flex:1">Zabbix URL<input id="site-f-url" placeholder="https://zabbix2.example.com"></label>
+    </div>
+    <div class="ar-form-row">
+      <label style="flex:1">API Token<input id="site-f-token" type="password" placeholder="Zabbix API token"></label>
+    </div>
+    <div class="ar-form-row">
+      <label style="flex:1;flex-direction:row;align-items:center;gap:8px">
+        <input id="site-f-default" type="checkbox"> Set as default site
+      </label>
+      <label style="flex:1;flex-direction:row;align-items:center;gap:8px">
+        <input id="site-f-enabled" type="checkbox" checked> Enabled
+      </label>
+    </div>
+    <div class="ar-form-row">
+      <label style="flex:1">Notes<textarea id="site-f-notes" rows="2" placeholder="Optional notes about this site"></textarea></label>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">
+      <button onclick="closeSiteModal()" class="btn btn-ghost" style="font-size:12px">Cancel</button>
+      <button onclick="saveSite()" class="btn btn-primary" style="font-size:12px">Save Site</button>
+    </div>
+    <div id="site-modal-result" style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--cyan);text-align:center;margin-top:6px"></div>
+  </div>
+</div>
+
+<!-- ══ ZABBIX SCRIPTS MODAL ══ -->
+<div id="zbx-scripts-modal">
+  <div class="zbx-scripts-box">
+    <div class="zbx-scripts-hdr">
+      <div style="font-size:14px;font-weight:700;color:#fff">⚡ Execute Zabbix Script</div>
+      <div style="font-size:11px;color:var(--muted)" id="zbx-scripts-host-label"></div>
+      <div style="flex:1"></div>
+      <button onclick="closeZbxScriptsModal()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div class="zbx-scripts-list" id="zbx-scripts-list">
+      <div style="color:var(--muted);font-size:12px;text-align:center;padding:30px">Loading scripts…</div>
+    </div>
+    <div class="zbx-scripts-result" id="zbx-scripts-result"></div>
   </div>
 </div>
 
@@ -5514,7 +5799,7 @@ async function doCreateMap(){
 // ═══════════════════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════════════════
-const PAGE_TITLES={map:'Network Map',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office',incidents:'Incidents',runbooks:'Runbooks',sla:'SLA Dashboard',workflows:'Workflows',watchlist:'Proactive Watchlist',escalations:'Escalations',changes:'Change Calendar'};
+const PAGE_TITLES={map:'Network Map',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office',incidents:'Incidents',runbooks:'Runbooks',sla:'SLA Dashboard',workflows:'Workflows',watchlist:'Proactive Watchlist',escalations:'Escalations',changes:'Change Calendar','alert-rules':'Alert Rules Engine',sites:'Zabbix Sites'};
 function navigate(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -5531,9 +5816,11 @@ function navigate(page){
   if(page==='runbooks')    loadRunbooks();
   if(page==='sla')         loadSla();
   if(page==='workflows')   loadWfs();
-  if(page==='watchlist')   loadWatchlist();
-  if(page==='escalations') loadEscalations();
-  if(page==='changes')     loadChanges();
+  if(page==='watchlist')     loadWatchlist();
+  if(page==='escalations')   loadEscalations();
+  if(page==='changes')       loadChanges();
+  if(page==='alert-rules')   loadAlertRules();
+  if(page==='sites')         loadSites();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -10985,6 +11272,261 @@ function _fmtTs(ts) {
     const d = new Date(ts);
     return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   } catch { return ''; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  THEME TOGGLE
+// ═══════════════════════════════════════════════════════════
+function toggleTheme(){
+  const isLight=document.body.classList.toggle('light');
+  localStorage.setItem('noc-theme', isLight?'light':'dark');
+  document.getElementById('theme-toggle').textContent = isLight ? '☀️' : '🌙';
+}
+(function initTheme(){
+  const saved=localStorage.getItem('noc-theme');
+  if(saved==='light'){
+    document.body.classList.add('light');
+    const btn=document.getElementById('theme-toggle');
+    if(btn) btn.textContent='☀️';
+  }
+})();
+
+// ═══════════════════════════════════════════════════════════
+//  MOBILE SIDEBAR
+// ═══════════════════════════════════════════════════════════
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('sidebar-overlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MULTI-SITE SELECTOR
+// ═══════════════════════════════════════════════════════════
+async function loadSitesSelector(){
+  try{
+    const r=await fetch('/api/zabbix/sites');
+    if(!r.ok) return;
+    const sites=await r.json();
+    const sel=document.getElementById('site-sel');
+    sel.innerHTML='<option value="">— Default Site —</option>';
+    sites.forEach(s=>{
+      const opt=document.createElement('option');
+      opt.value=s.id;
+      opt.textContent=s.name;
+      if(s.is_default) opt.selected=true;
+      sel.appendChild(opt);
+    });
+  }catch(e){}
+}
+function switchSite(siteId){
+  sessionStorage.setItem('activeSiteId', siteId||'');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PDF EXPORT
+// ═══════════════════════════════════════════════════════════
+function downloadPdf(type){
+  const now=new Date();
+  const month=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const url=type==='sla'
+    ? `/api/reports/sla/pdf?month=${month}`
+    : `/api/reports/incidents/pdf?month=${month}`;
+  const a=document.createElement('a');
+  a.href=url; a.download=`${type}_report_${month}.pdf`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ALERT RULES ENGINE
+// ═══════════════════════════════════════════════════════════
+let _arEditId=null;
+async function loadAlertRules(){
+  const tbody=document.getElementById('ar-tbody');
+  tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">Loading…</td></tr>';
+  try{
+    const r=await fetch('/api/alert-rules');
+    const rules=await r.json();
+    if(!rules.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">No alert rules yet. Click + New Rule.</td></tr>';return}
+    tbody.innerHTML=rules.map(rule=>`<tr>
+      <td style="font-weight:600;color:#fff">${rule.name||''}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px"><span style="color:var(--cyan)">${rule.condition_field}</span> <span style="color:var(--muted)">${rule.condition_op}</span> <span style="color:var(--yellow)">${rule.condition_value}</span></td>
+      <td style="font-size:11px">${_arActionLabel(rule.action_type)}</td>
+      <td style="font-size:11px;color:var(--muted)">${rule.cooldown_minutes}m</td>
+      <td style="font-size:11px;color:var(--muted)">${rule.priority}</td>
+      <td style="font-size:11px;color:var(--muted)">${rule.fire_count||0}</td>
+      <td><span class="ar-badge ${rule.enabled?'ar-badge-on':'ar-badge-off'}" style="cursor:pointer" onclick="toggleAlertRule(${rule.id},this)">${rule.enabled?'ON':'OFF'}</span></td>
+      <td style="white-space:nowrap">
+        <button class="tb-btn" onclick="editAlertRule(${rule.id})" style="font-size:10px;padding:3px 8px">Edit</button>
+        <button class="tb-btn" onclick="deleteAlertRule(${rule.id})" style="font-size:10px;padding:3px 8px;margin-left:4px;color:var(--red);border-color:rgba(255,23,68,0.3)">Del</button>
+      </td></tr>`).join('');
+  }catch(e){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--red)">Error: ${e.message}</td></tr>`}
+}
+function _arActionLabel(t){return {assign_employee:'🤖 Assign Employee',send_teams:'💬 Teams',send_email:'📧 Email',create_incident:'🚨 Incident',suppress:'🔕 Suppress'}[t]||t}
+function openArModal(){
+  _arEditId=null;
+  ['ar-f-name','ar-f-val','ar-modal-result'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ar-f-field').value='severity';
+  document.getElementById('ar-f-op').value='ge';
+  document.getElementById('ar-f-action').value='assign_employee';
+  document.getElementById('ar-f-priority').value=100;
+  document.getElementById('ar-f-cooldown').value=60;
+  document.getElementById('ar-modal-title').textContent='New Alert Rule';
+  arActionChanged();
+  document.getElementById('ar-modal').classList.add('active');
+}
+async function editAlertRule(id){
+  const rule=(await fetch(`/api/alert-rules/${id}`).then(r=>r.json()));
+  _arEditId=id;
+  document.getElementById('ar-modal-title').textContent='Edit Alert Rule';
+  document.getElementById('ar-f-name').value=rule.name||'';
+  document.getElementById('ar-f-field').value=rule.condition_field||'severity';
+  document.getElementById('ar-f-op').value=rule.condition_op||'ge';
+  document.getElementById('ar-f-val').value=rule.condition_value||'';
+  document.getElementById('ar-f-action').value=rule.action_type||'assign_employee';
+  document.getElementById('ar-f-priority').value=rule.priority||100;
+  document.getElementById('ar-f-cooldown').value=rule.cooldown_minutes||60;
+  document.getElementById('ar-modal-result').textContent='';
+  arActionChanged(rule.action_data);
+  document.getElementById('ar-modal').classList.add('active');
+}
+function closeArModal(){document.getElementById('ar-modal').classList.remove('active')}
+function arActionChanged(existingData){
+  const action=document.getElementById('ar-f-action').value;
+  let data={};try{data=existingData?JSON.parse(existingData):{}}catch(e){}
+  const extra=document.getElementById('ar-action-extra');
+  if(action==='assign_employee'){
+    extra.innerHTML=`<label class="ar-form-row" style="flex-direction:column"><span style="font-size:11px;color:var(--muted)">Employee ID</span><select id="ar-extra-emp" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:7px;font-size:12px"><option value="aria">ARIA</option><option value="nexus">NEXUS</option><option value="cipher">CIPHER</option><option value="vega">VEGA</option></select></label>`;
+    if(data.employee_id) document.getElementById('ar-extra-emp').value=data.employee_id;
+  }else if(action==='send_teams'){
+    extra.innerHTML=`<label class="ar-form-row" style="flex-direction:column"><span style="font-size:11px;color:var(--muted)">Teams Webhook URL</span><input id="ar-extra-webhook" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:7px;font-size:12px" placeholder="https://outlook.office.com/webhook/..." value="${data.webhook_url||''}"></label>`;
+  }else if(action==='send_email'){
+    extra.innerHTML=`<label class="ar-form-row" style="flex-direction:column"><span style="font-size:11px;color:var(--muted)">Recipient Email</span><input id="ar-extra-email" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:7px;font-size:12px" placeholder="noc-team@example.com" value="${data.to||''}"></label>`;
+  }else{extra.innerHTML=''}
+}
+async function saveAlertRule(){
+  const action=document.getElementById('ar-f-action').value;
+  let actionData={};
+  if(action==='assign_employee'){const e=document.getElementById('ar-extra-emp');if(e)actionData={employee_id:e.value}}
+  if(action==='send_teams'){const e=document.getElementById('ar-extra-webhook');if(e)actionData={webhook_url:e.value}}
+  if(action==='send_email'){const e=document.getElementById('ar-extra-email');if(e)actionData={to:e.value}}
+  const body={name:document.getElementById('ar-f-name').value.trim(),condition_field:document.getElementById('ar-f-field').value,condition_op:document.getElementById('ar-f-op').value,condition_value:document.getElementById('ar-f-val').value.trim(),action_type:action,action_data:JSON.stringify(actionData),priority:parseInt(document.getElementById('ar-f-priority').value)||100,cooldown_minutes:parseInt(document.getElementById('ar-f-cooldown').value)||60,enabled:true};
+  const res=document.getElementById('ar-modal-result');res.textContent='Saving…';
+  const url=_arEditId?`/api/alert-rules/${_arEditId}`:'/api/alert-rules';
+  const method=_arEditId?'PUT':'POST';
+  try{const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();
+    if(r.ok){res.style.color='var(--green)';res.textContent='Saved!';setTimeout(()=>{closeArModal();loadAlertRules()},700)}
+    else{res.style.color='var(--red)';res.textContent=d.detail||'Error'}
+  }catch(e){res.style.color='var(--red)';res.textContent=e.message}
+}
+async function toggleAlertRule(id,badge){const d=await fetch(`/api/alert-rules/${id}/toggle`,{method:'PATCH'}).then(r=>r.json());badge.textContent=d.enabled?'ON':'OFF';badge.className=`ar-badge ${d.enabled?'ar-badge-on':'ar-badge-off'}`}
+async function deleteAlertRule(id){if(!confirm('Delete this alert rule?'))return;await fetch(`/api/alert-rules/${id}`,{method:'DELETE'});loadAlertRules()}
+
+// ═══════════════════════════════════════════════════════════
+//  ZABBIX SITES
+// ═══════════════════════════════════════════════════════════
+let _siteEditId=null;
+async function loadSites(){
+  const grid=document.getElementById('sites-grid');
+  grid.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:40px">Loading…</div>';
+  try{
+    const sites=await fetch('/api/zabbix/sites').then(r=>r.json());
+    if(!sites.length){grid.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:40px">No sites configured. Click + Add Site.</div>';return}
+    grid.innerHTML=sites.map(s=>`<div class="site-card">
+      <div class="site-card-top"><div class="site-dot" style="background:${s.color||'#00d4ff'}"></div><div class="site-name">${s.name}</div>${s.is_default?'<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;background:rgba(0,212,255,0.1);color:var(--cyan);border:1px solid rgba(0,212,255,0.25)">DEFAULT</span>':''}</div>
+      <div class="site-url" title="${s.url}">${s.url}</div>
+      ${s.notes?`<div style="font-size:10px;color:var(--muted)">${s.notes}</div>`:''}
+      <div class="site-actions">
+        <button class="tb-btn" onclick="testSite(${s.id})" style="font-size:10px;padding:3px 8px">Test</button>
+        <button class="tb-btn" onclick="editSite(${s.id})" style="font-size:10px;padding:3px 8px">Edit</button>
+        <button class="tb-btn" onclick="deleteSite(${s.id})" style="font-size:10px;padding:3px 8px;color:var(--red);border-color:rgba(255,23,68,0.3)">Delete</button>
+        <span id="site-test-${s.id}" style="font-size:10px;font-family:'JetBrains Mono',monospace;margin-left:4px"></span>
+      </div></div>`).join('');
+    loadSitesSelector();
+  }catch(e){grid.innerHTML=`<div style="color:var(--red);font-size:12px;text-align:center;padding:40px">Error: ${e.message}</div>`}
+}
+function openSiteModal(){
+  _siteEditId=null;
+  document.getElementById('site-modal-title').textContent='Add Zabbix Site';
+  ['site-f-name','site-f-url','site-f-token','site-f-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('site-f-color').value='#00d4ff';
+  document.getElementById('site-f-default').checked=false;
+  document.getElementById('site-f-enabled').checked=true;
+  document.getElementById('site-modal-result').textContent='';
+  document.getElementById('site-modal').classList.add('active');
+}
+async function editSite(id){
+  const sites=await fetch('/api/zabbix/sites').then(r=>r.json());
+  const s=sites.find(x=>x.id===id);if(!s)return;
+  _siteEditId=id;
+  document.getElementById('site-modal-title').textContent='Edit Site';
+  document.getElementById('site-f-name').value=s.name||'';
+  document.getElementById('site-f-url').value=s.url||'';
+  document.getElementById('site-f-token').value='';
+  document.getElementById('site-f-color').value=s.color||'#00d4ff';
+  document.getElementById('site-f-default').checked=!!s.is_default;
+  document.getElementById('site-f-enabled').checked=!!s.enabled;
+  document.getElementById('site-f-notes').value=s.notes||'';
+  document.getElementById('site-modal-result').textContent='';
+  document.getElementById('site-modal').classList.add('active');
+}
+function closeSiteModal(){document.getElementById('site-modal').classList.remove('active')}
+async function saveSite(){
+  const body={name:document.getElementById('site-f-name').value.trim(),url:document.getElementById('site-f-url').value.trim(),token:document.getElementById('site-f-token').value,color:document.getElementById('site-f-color').value,is_default:document.getElementById('site-f-default').checked,enabled:document.getElementById('site-f-enabled').checked,notes:document.getElementById('site-f-notes').value.trim()||null};
+  const res=document.getElementById('site-modal-result');res.textContent='Saving…';
+  const url=_siteEditId?`/api/zabbix/sites/${_siteEditId}`:'/api/zabbix/sites';
+  const method=_siteEditId?'PUT':'POST';
+  try{const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();
+    if(r.ok){res.style.color='var(--green)';res.textContent='Saved!';setTimeout(()=>{closeSiteModal();loadSites()},700)}
+    else{res.style.color='var(--red)';res.textContent=d.detail||'Error'}
+  }catch(e){res.style.color='var(--red)';res.textContent=e.message}
+}
+async function deleteSite(id){if(!confirm('Delete this site?'))return;await fetch(`/api/zabbix/sites/${id}`,{method:'DELETE'});loadSites()}
+async function testSite(id){
+  const lbl=document.getElementById(`site-test-${id}`);
+  lbl.textContent='Testing…';lbl.style.color='var(--muted)';
+  try{const d=await fetch(`/api/zabbix/sites/${id}/test`,{method:'POST'}).then(r=>r.json());
+    if(d.ok){lbl.style.color='var(--green)';lbl.textContent=`✓ v${d.version}`}
+    else{lbl.style.color='var(--red)';lbl.textContent=`✗ ${d.error||'fail'}`}
+  }catch(e){lbl.style.color='var(--red)';lbl.textContent='✗ Error'}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ZABBIX SCRIPTS
+// ═══════════════════════════════════════════════════════════
+let _zbxScriptHostId=null,_zbxScripts=[];
+async function openZbxScriptsModal(hostid,hostname){
+  _zbxScriptHostId=hostid||null;
+  document.getElementById('zbx-scripts-host-label').textContent=hostname?`Host: ${hostname}`:'(all hosts)';
+  const resDiv=document.getElementById('zbx-scripts-result');resDiv.style.display='none';resDiv.textContent='';
+  document.getElementById('zbx-scripts-modal').classList.add('active');
+  const list=document.getElementById('zbx-scripts-list');
+  list.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:30px">Loading…</div>';
+  try{
+    const url=hostid?`/api/zabbix/scripts?hostid=${hostid}`:'/api/zabbix/scripts';
+    _zbxScripts=await fetch(url).then(r=>r.json());
+    if(!_zbxScripts.length){list.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:30px">No scripts available</div>';return}
+    list.innerHTML=_zbxScripts.map((s,i)=>`<div class="zbx-script-item" onclick="zbxSelectScript(${i})">
+      <div class="zbx-script-name">${s.name||''}</div>
+      ${s.description?`<div class="zbx-script-desc">${s.description}</div>`:''}
+      <div style="font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:3px">ID: ${s.scriptid}</div>
+    </div>`).join('');
+  }catch(e){list.innerHTML=`<div style="color:var(--red);font-size:12px;text-align:center;padding:30px">Error: ${e.message}</div>`}
+}
+function closeZbxScriptsModal(){document.getElementById('zbx-scripts-modal').classList.remove('active')}
+async function zbxSelectScript(idx){
+  const script=_zbxScripts[idx];if(!script)return;
+  if(!_zbxScriptHostId){alert('Open this dialog from a host row to execute scripts.');return}
+  if(!confirm(`Execute "${script.name}" on this host?\n\nThis runs on the live system.`))return;
+  const resDiv=document.getElementById('zbx-scripts-result');
+  resDiv.style.display='block';resDiv.style.color='var(--cyan)';resDiv.textContent='Executing…';
+  try{
+    const r=await fetch('/api/zabbix/scripts/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scriptid:script.scriptid,hostid:_zbxScriptHostId,confirm:true})});
+    const d=await r.json();
+    if(r.ok&&d.ok){resDiv.style.color='var(--green)';resDiv.textContent=`✓ Output:\n${(d.result&&d.result.value)||JSON.stringify(d.result)}`}
+    else{resDiv.style.color='var(--red)';resDiv.textContent=`✗ ${d.detail||JSON.stringify(d)}`}
+  }catch(e){resDiv.style.color='var(--red)';resDiv.textContent=`✗ ${e.message}`}
 }
 
 </script>

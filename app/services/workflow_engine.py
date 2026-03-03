@@ -264,6 +264,64 @@ async def _poll_alarm_workflows():
                 continue
             asyncio.create_task(_run_workflow(wf["id"], {"trigger": "alarm", "problem": p}))
 
+    # ── Alert Rules Engine: evaluate each new problem against custom rules ──
+    if new_problems:
+        try:
+            from app.routers.alert_rules import evaluate_rules_for_alarm
+            for p in new_problems:
+                asyncio.create_task(evaluate_rules_for_alarm(p))
+        except Exception as e:
+            logger.warning(f"Alert rules evaluation error: {e}")
+
+
+async def _run_workflow_for_alarm(employee_id: str, alarm: dict):
+    """
+    Trigger an ad-hoc AI analysis of an alarm by a specific employee.
+    Used by the alert rules engine (assign_employee action).
+    """
+    try:
+        from app.database import fetch_one as _fetch
+        from app.services.ai_stream import stream_ai
+        from app.services.employee_prompt import build_employee_system_prompt
+
+        cfg = await _fetch("SELECT * FROM zabbix_config LIMIT 1")
+        if not cfg:
+            return
+
+        emp_row = await _fetch("SELECT ai_provider, ai_model FROM employee_profiles WHERE id=%s", (employee_id,))
+        provider = (emp_row or {}).get("ai_provider") or cfg.get("default_ai_provider") or "claude"
+        model    = (emp_row or {}).get("ai_model")    or cfg.get("default_ai_model")    or "claude-haiku-4-5-20251001"
+        api_key  = cfg.get(f"{provider}_key") or cfg.get("claude_key", "")
+        if not api_key:
+            return
+
+        sys_prompt = await build_employee_system_prompt(employee_id)
+        alarm_name = alarm.get("name", "Unknown alarm")
+        severity   = alarm.get("severity", "?")
+        prompt = (
+            f"ALERT RULE triggered. Analyze this alarm immediately:\n"
+            f"Alarm: {alarm_name}\nSeverity: {severity}\n"
+            f"Event ID: {alarm.get('eventid','?')}\n\n"
+            "Provide: severity assessment, probable cause, and immediate action recommendation."
+        )
+
+        chunks = []
+        async for chunk in stream_ai(provider, api_key, model, sys_prompt, prompt):
+            if chunk.get("type") == "text":
+                chunks.append(chunk["text"])
+
+        response = "".join(chunks).strip()
+        if response:
+            from app.services.memory import save_memory_direct
+            await save_memory_direct(
+                employee_id, "alert_rule_trigger",
+                f"Alert rule fired: {alarm_name}",
+                response[:500],
+                alarm_type=alarm_name,
+            )
+    except Exception as e:
+        logger.warning(f"_run_workflow_for_alarm failed: {e}")
+
 
 async def _run_workflow(workflow_id: int, trigger_data: dict):
     """Execute a single workflow: get AI analysis → execute action → log run."""

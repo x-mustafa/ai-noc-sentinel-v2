@@ -13,8 +13,8 @@ async def get_zabbix_config() -> dict:
         return {"url": "", "token": "", "refresh": 30}
 
 
-async def call_zabbix(method: str, params: dict = None):
-    cfg = await get_zabbix_config()
+async def call_zabbix(method: str, params: dict = None, cfg_override: dict = None):
+    cfg = cfg_override or await get_zabbix_config()
     url = cfg["url"].rstrip("/") + "/api_jsonrpc.php"
     token = cfg.get("token", "")
 

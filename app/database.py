@@ -414,6 +414,44 @@ async def run_migration():
         # F12 — Weighted feedback on memory entries
         "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `source` VARCHAR(30) DEFAULT 'auto'",
         "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `weight` TINYINT DEFAULT 1 COMMENT '1=normal,3=correction,5=critical'",
+
+        # Incidents: auto-creation source tag
+        "ALTER TABLE `incidents` ADD COLUMN IF NOT EXISTS `source` VARCHAR(50) DEFAULT 'manual'",
+
+        # Alerting Rules Engine
+        """CREATE TABLE IF NOT EXISTS `alert_rules` (
+            `id`               INT AUTO_INCREMENT PRIMARY KEY,
+            `name`             VARCHAR(200) NOT NULL,
+            `enabled`          TINYINT(1) DEFAULT 1,
+            `priority`         INT DEFAULT 0 COMMENT 'higher = evaluated first',
+            `condition_field`  VARCHAR(50) NOT NULL COMMENT 'severity|host|alarm_name|tag',
+            `condition_op`     VARCHAR(20) NOT NULL COMMENT '>=|<=|=|!=|contains|not_contains',
+            `condition_value`  VARCHAR(200) NOT NULL,
+            `action_type`      VARCHAR(50) NOT NULL COMMENT 'assign_employee|send_teams|send_email|suppress|create_incident',
+            `action_data`      TEXT COMMENT 'JSON: {employee_id, webhook_url, email, ...}',
+            `cooldown_minutes` INT DEFAULT 15,
+            `fire_count`       INT DEFAULT 0,
+            `last_fired`       TIMESTAMP NULL,
+            `description`      TEXT,
+            `created_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_ar_enabled` (`enabled`, `priority`)
+        ) ENGINE=InnoDB""",
+
+        # Multi-site / Multi-tenant: additional Zabbix instances
+        """CREATE TABLE IF NOT EXISTS `sites` (
+            `id`          INT AUTO_INCREMENT PRIMARY KEY,
+            `name`        VARCHAR(100) NOT NULL,
+            `url`         VARCHAR(500) NOT NULL,
+            `token`       VARCHAR(500) DEFAULT '',
+            `username`    VARCHAR(100) DEFAULT '',
+            `password`    VARCHAR(200) DEFAULT '',
+            `color`       VARCHAR(20) DEFAULT '#00d4ff',
+            `enabled`     TINYINT(1) DEFAULT 1,
+            `is_default`  TINYINT(1) DEFAULT 0,
+            `notes`       TEXT,
+            `created_at`  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_sites_enabled` (`enabled`)
+        ) ENGINE=InnoDB""",
     ]
     for sql in sqls:
         try:

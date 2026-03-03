@@ -285,3 +285,121 @@ async def save_config(body: ZabbixConfigBody, session: dict = Depends(require_ad
         await execute("INSERT INTO zabbix_config (url, token, refresh) VALUES (%s,%s,%s)",
                       (body.url, body.token, body.refresh))
     return {"ok": True}
+
+
+# ── Script / Command Execution ─────────────────────────────────────────────────
+
+class ScriptExecBody(BaseModel):
+    scriptid: str
+    hostid: str
+    confirm: bool = False   # explicit safety gate — must be True to execute
+
+
+@router.get("/scripts")
+async def list_scripts(
+    hostid: Optional[str] = Query(default=None),
+    session: dict = Depends(require_operator),
+):
+    """List Zabbix global scripts available for a host (or all scripts)."""
+    params: dict = {"output": ["scriptid", "name", "description", "type", "scope", "command"]}
+    if hostid:
+        params["hostids"] = [hostid]
+    result = await call_zabbix("script.get", params)
+    if not isinstance(result, list):
+        return []
+    return result
+
+
+@router.post("/scripts/execute")
+async def execute_script(body: ScriptExecBody, session: dict = Depends(require_operator)):
+    """
+    Execute a Zabbix global script on a host.
+    Requires confirm=true to prevent accidental execution.
+    Result is returned verbatim from Zabbix.
+    """
+    if not body.confirm:
+        raise HTTPException(400, "Set confirm=true to execute the script")
+
+    result = await call_zabbix("script.execute", {
+        "scriptid": body.scriptid,
+        "hostid":   body.hostid,
+    })
+    if isinstance(result, dict) and result.get("_zabbix_error"):
+        raise HTTPException(502, result["_zabbix_error"])
+    return {"ok": True, "result": result}
+
+
+# ── Multi-site management ──────────────────────────────────────────────────────
+
+class SiteBody(BaseModel):
+    name: str
+    url: str
+    token: Optional[str] = ""
+    color: Optional[str] = "#00d4ff"
+    enabled: bool = True
+    is_default: bool = False
+    notes: Optional[str] = None
+
+
+@router.get("/sites")
+async def list_sites(session: dict = Depends(get_session)):
+    """Return all configured Zabbix sites (tokens masked)."""
+    rows = await fetch_all("SELECT * FROM sites ORDER BY is_default DESC, name ASC")
+    for r in rows:
+        t = r.get("token") or ""
+        r["token_masked"] = (t[:4] + "***" + t[-4:]) if len(t) > 8 else ("***" if t else "")
+        r.pop("token", None)
+        r.pop("password", None)
+    return rows
+
+
+@router.post("/sites")
+async def create_site(body: SiteBody, session: dict = Depends(require_admin)):
+    if body.is_default:
+        await execute("UPDATE sites SET is_default=0")
+    site_id = await execute(
+        "INSERT INTO sites (name, url, token, color, enabled, is_default, notes) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+        (body.name, body.url, body.token or "", body.color, int(body.enabled), int(body.is_default), body.notes),
+    )
+    return {"id": site_id, "status": "created"}
+
+
+@router.put("/sites/{site_id}")
+async def update_site(site_id: int, body: SiteBody, session: dict = Depends(require_admin)):
+    existing = await fetch_one("SELECT id FROM sites WHERE id=%s", (site_id,))
+    if not existing:
+        raise HTTPException(404, "Site not found")
+    if body.is_default:
+        await execute("UPDATE sites SET is_default=0")
+    token_changed = body.token and "*" not in body.token
+    if token_changed:
+        await execute(
+            "UPDATE sites SET name=%s, url=%s, token=%s, color=%s, enabled=%s, is_default=%s, notes=%s WHERE id=%s",
+            (body.name, body.url, body.token, body.color, int(body.enabled), int(body.is_default), body.notes, site_id),
+        )
+    else:
+        await execute(
+            "UPDATE sites SET name=%s, url=%s, color=%s, enabled=%s, is_default=%s, notes=%s WHERE id=%s",
+            (body.name, body.url, body.color, int(body.enabled), int(body.is_default), body.notes, site_id),
+        )
+    return {"status": "updated"}
+
+
+@router.delete("/sites/{site_id}")
+async def delete_site(site_id: int, session: dict = Depends(require_admin)):
+    await execute("DELETE FROM sites WHERE id=%s", (site_id,))
+    return {"status": "deleted"}
+
+
+@router.post("/sites/{site_id}/test")
+async def test_site(site_id: int, session: dict = Depends(get_session)):
+    """Test connectivity to a specific site."""
+    row = await fetch_one("SELECT * FROM sites WHERE id=%s", (site_id,))
+    if not row:
+        raise HTTPException(404, "Site not found")
+    from app.services.zabbix_client import call_zabbix as _call
+    cfg = {"url": row["url"], "token": row["token"], "username": row.get("username",""), "password": row.get("password","")}
+    result = await _call("apiinfo.version", {}, cfg_override=cfg)
+    if result is None or (isinstance(result, dict) and "_zabbix_error" in result):
+        return {"ok": False, "error": str(result)}
+    return {"ok": True, "version": result, "site": row["name"]}
