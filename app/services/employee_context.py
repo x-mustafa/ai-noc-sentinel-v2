@@ -256,17 +256,44 @@ async def get_sla_context() -> str:
 
 # ── Combined Context ───────────────────────────────────────────────────────────
 
-async def get_full_operational_context(employee_id: str, host: str = None) -> str:
+async def get_full_operational_context(employee_id: str, host: str = None, alarm_type: str = None) -> str:
     """
     Combine all real-time operational context into one block for system prompt injection.
     Includes: open incidents, shift state, inbox messages, performance stats,
-    device knowledge (if host provided), SLA status (VEGA only).
+    device knowledge (if host provided), SLA status (VEGA only),
+    F11 time-based patterns, F13 active change windows.
     """
-    incident_ctx    = await get_employee_incident_context(employee_id)
-    shift_ctx       = await get_employee_shift_context(employee_id)
-    inbox_ctx       = await get_employee_inbox_context(employee_id)
-    performance_ctx = await get_employee_performance_context(employee_id)
-    device_ctx      = await get_employee_device_knowledge(employee_id, host) if host else ""
-    sla_ctx         = await get_sla_context() if employee_id == "vega" else ""
+    import asyncio
+    from app.services.memory import get_pattern_context
+    from app.routers.changes import get_active_change_context
 
-    return incident_ctx + shift_ctx + inbox_ctx + performance_ctx + device_ctx + sla_ctx
+    (
+        incident_ctx,
+        shift_ctx,
+        inbox_ctx,
+        performance_ctx,
+        device_ctx,
+        sla_ctx,
+        pattern_ctx,
+        change_ctx,
+    ) = await asyncio.gather(
+        get_employee_incident_context(employee_id),
+        get_employee_shift_context(employee_id),
+        get_employee_inbox_context(employee_id),
+        get_employee_performance_context(employee_id),
+        get_employee_device_knowledge(employee_id, host) if host else _noop(),
+        get_sla_context() if employee_id == "vega" else _noop(),
+        get_pattern_context(employee_id, host=host, alarm_type=alarm_type),
+        get_active_change_context(),
+    )
+
+    parts = [incident_ctx, shift_ctx, inbox_ctx, performance_ctx, device_ctx, sla_ctx]
+    if pattern_ctx:
+        parts.append(f"\n\n---- TIME-BASED PATTERNS ----\n{pattern_ctx}\n---- END PATTERNS ----")
+    if change_ctx:
+        parts.append(f"\n\n---- {change_ctx} ----")
+    return "".join(parts)
+
+
+async def _noop() -> str:
+    return ""
