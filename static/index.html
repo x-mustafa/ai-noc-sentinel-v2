@@ -1431,6 +1431,35 @@ select.form-inp option{background:#0d1628}
 }
 .feedback-submit-btn:hover{background:linear-gradient(135deg,rgba(0,212,255,0.25),rgba(120,80,240,0.2));box-shadow:0 0 14px rgba(0,212,255,0.2)}
 
+/* ── TERMINAL INLINE RATING ROW (F12) ── */
+.term-rating-row{
+  display:flex;align-items:center;gap:6px;margin-top:8px;padding:6px 8px;
+  border-top:1px solid rgba(255,255,255,0.06);
+}
+.term-rating-lbl{font-size:9px;color:#3d6070;text-transform:uppercase;letter-spacing:0.6px;margin-right:2px;white-space:nowrap}
+.term-rate-btn{
+  padding:3px 10px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;
+  border:1px solid var(--border);background:rgba(255,255,255,0.03);color:#7090b0;
+  transition:all 0.15s;font-family:'Space Grotesk',sans-serif;
+}
+.term-rate-btn[data-r="3"]:hover,.term-rate-btn[data-r="3"].sel{background:rgba(74,222,128,0.15);border-color:rgba(74,222,128,0.4);color:#86efac}
+.term-rate-btn[data-r="2"]:hover,.term-rate-btn[data-r="2"].sel{background:rgba(251,191,36,0.15);border-color:rgba(251,191,36,0.4);color:#fde68a}
+.term-rate-btn[data-r="1"]:hover,.term-rate-btn[data-r="1"].sel{background:rgba(255,23,68,0.15);border-color:rgba(255,23,68,0.4);color:#fca5a5}
+.term-rate-done{font-size:10px;color:#4ade80;margin-left:2px}
+
+/* ── EMPLOYEE INSTRUCTIONS SETTINGS CARD ── */
+.emp-instr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:12px}
+.emp-instr-item{
+  background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;
+  padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.emp-instr-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.emp-instr-info{flex:1;min-width:0}
+.emp-instr-name{font-size:12px;font-weight:700;margin-bottom:2px}
+.emp-instr-status{font-size:10px;color:var(--muted)}
+.emp-instr-edit{padding:4px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid rgba(0,212,255,0.3);background:rgba(0,212,255,0.08);color:var(--cyan);transition:all 0.15s;white-space:nowrap}
+.emp-instr-edit:hover{background:rgba(0,212,255,0.18);box-shadow:0 0 8px rgba(0,212,255,0.15)}
+
 /* ── INSTRUCTIONS EDITOR MODAL ── */
 .instr-modal-overlay{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);
@@ -2169,6 +2198,51 @@ select.form-inp option{background:#0d1628}
         </div>
         <button class="btn btn-primary" onclick="saveAutoIncSettings()">Save</button>
         <div id="auto-inc-result" style="margin-top:10px;font-size:11px;font-family:'JetBrains Mono',monospace"></div>
+      </div>
+
+      <!-- AI Employee Instructions -->
+      <div class="settings-card">
+        <h3 style="display:flex;align-items:center;gap:8px">
+          <i data-lucide="brain-circuit" style="width:14px;height:14px;color:var(--cyan)"></i> AI Employee Instructions
+        </h3>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:4px">
+          Customize each employee's identity, expertise, communication style, and hard constraints.
+          Changes take effect on the next task.
+        </p>
+        <div class="emp-instr-grid" id="settings-instr-grid">
+          <div class="emp-instr-item">
+            <div class="emp-instr-avatar" style="background:rgba(0,212,255,0.1);color:#00d4ff">A</div>
+            <div class="emp-instr-info">
+              <div class="emp-instr-name" style="color:#00d4ff">ARIA</div>
+              <div class="emp-instr-status" id="si-aria-status">NOC Analyst</div>
+            </div>
+            <button class="emp-instr-edit" onclick="navigate('office');switchOfficeTab('employees');setTimeout(()=>openInstrModal('aria'),300)">Edit ✏</button>
+          </div>
+          <div class="emp-instr-item">
+            <div class="emp-instr-avatar" style="background:rgba(167,139,250,0.1);color:#a78bfa">N</div>
+            <div class="emp-instr-info">
+              <div class="emp-instr-name" style="color:#a78bfa">NEXUS</div>
+              <div class="emp-instr-status" id="si-nexus-status">Infrastructure Engineer</div>
+            </div>
+            <button class="emp-instr-edit" onclick="navigate('office');switchOfficeTab('employees');setTimeout(()=>openInstrModal('nexus'),300)">Edit ✏</button>
+          </div>
+          <div class="emp-instr-item">
+            <div class="emp-instr-avatar" style="background:rgba(249,115,22,0.1);color:#f97316">C</div>
+            <div class="emp-instr-info">
+              <div class="emp-instr-name" style="color:#f97316">CIPHER</div>
+              <div class="emp-instr-status" id="si-cipher-status">Security Analyst</div>
+            </div>
+            <button class="emp-instr-edit" onclick="navigate('office');switchOfficeTab('employees');setTimeout(()=>openInstrModal('cipher'),300)">Edit ✏</button>
+          </div>
+          <div class="emp-instr-item">
+            <div class="emp-instr-avatar" style="background:rgba(74,222,128,0.1);color:#4ade80">V</div>
+            <div class="emp-instr-info">
+              <div class="emp-instr-name" style="color:#4ade80">VEGA</div>
+              <div class="emp-instr-status" id="si-vega-status">Site Reliability Engineer</div>
+            </div>
+            <button class="emp-instr-edit" onclick="navigate('office');switchOfficeTab('employees');setTimeout(()=>openInstrModal('vega'),300)">Edit ✏</button>
+          </div>
+        </div>
       </div>
 
       <!-- Change password -->
@@ -5023,6 +5097,27 @@ async function loadSettingsData(){
   await loadM365Config();
   // Load auto-incident settings
   loadAutoIncSettings();
+  // Load employee instruction status for settings card
+  loadSettingsInstrStatus();
+}
+
+async function loadSettingsInstrStatus() {
+  for (const empId of ['aria','nexus','cipher','vega']) {
+    try {
+      const data = await api(`/api/office/profiles/${empId}/instructions`);
+      const el = document.getElementById(`si-${empId}-status`);
+      if (!el) continue;
+      const hasInstr = data && (data.instruction_identity || data.instruction_expertise);
+      if (hasInstr) {
+        const preview = (data.instruction_identity || data.instruction_expertise || '').slice(0, 60);
+        el.style.color = '#4ade80';
+        el.textContent = '✓ ' + preview + (preview.length >= 60 ? '…' : '');
+      } else {
+        el.style.color = 'var(--muted)';
+        el.textContent = 'Using built-in defaults';
+      }
+    } catch {}
+  }
 }
 
 // ── USER MANAGEMENT ────────────────────────────────────────
@@ -8670,6 +8765,24 @@ async function _finishEmpTask(empId, emp, output, taskType='custom') {
 
   _addFeedItem(empId, `Task completed`, emp.color);
 
+  // F12 — Inject inline rating row after output
+  if (output && output.length > 20) {
+    const taskId = OFFICE_STATE.taskCount;
+    const term = document.getElementById(`emp-${empId}-terminal`);
+    if (term) {
+      const ratingRow = document.createElement('div');
+      ratingRow.className = 'term-rating-row';
+      ratingRow.id = `emp-${empId}-rating-${taskId}`;
+      ratingRow.innerHTML =
+        `<span class="term-rating-lbl">Rate response:</span>` +
+        `<button class="term-rate-btn" data-r="3" onclick="rateEmpResponse('${empId}',${taskId},3,this)">✓ Correct</button>` +
+        `<button class="term-rate-btn" data-r="2" onclick="rateEmpResponse('${empId}',${taskId},2,this)">~ Acceptable</button>` +
+        `<button class="term-rate-btn" data-r="1" onclick="rateEmpResponse('${empId}',${taskId},1,this)">✗ Wrong</button>`;
+      term.appendChild(ratingRow);
+      term.scrollTop = term.scrollHeight;
+    }
+  }
+
   // Auto-read: speak response aloud if per-employee auto-read is enabled
   if (output && output.length > 5 && typeof VC !== 'undefined') {
     VC.speakResponse(empId, output.slice(0, 800)); // limit to first ~800 chars
@@ -8779,6 +8892,40 @@ function clearEmpHistory(empId) {
   _addFeedItem(empId, 'Conversation history cleared', '#8aa0c0');
   // Visual feedback on the button
   if (clrBtn) { clrBtn.textContent='✓'; setTimeout(()=>{ clrBtn.textContent='⊘'; },1200); }
+}
+
+// F12 — Rate an employee's live response
+async function rateEmpResponse(empId, taskId, rating, btn) {
+  // Collapse all buttons and show confirmation
+  const row = document.getElementById(`emp-${empId}-rating-${taskId}`);
+  if (!row) return;
+
+  // Mark selected button immediately
+  row.querySelectorAll('.term-rate-btn').forEach(b => {
+    b.classList.remove('sel');
+    b.disabled = true;
+  });
+  btn.classList.add('sel');
+
+  try {
+    await api('/api/office/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        employee_id:  empId,
+        event_type:   'live_chat',
+        event_id:     taskId,
+        rating:       rating,
+        comment:      '',
+      }),
+    });
+  } catch(e) {
+    console.warn('Rating save failed:', e);
+  }
+
+  // Replace buttons with a thank-you note
+  const labels = {3:'✓ Marked correct', 2:'~ Marked acceptable', 1:'✗ Marked wrong'};
+  const colors  = {3:'#4ade80', 2:'#fde68a', 1:'#fca5a5'};
+  row.innerHTML = `<span class="term-rating-lbl">Feedback:</span><span class="term-rate-done" style="color:${colors[rating]}">${labels[rating]} — saved to memory</span>`;
 }
 
 function officeShowAssign(empId) {
