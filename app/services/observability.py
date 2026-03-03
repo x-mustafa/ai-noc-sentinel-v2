@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from urllib.parse import urlparse
 
 import httpx
@@ -167,6 +168,130 @@ KUMA_STATUS_PHRASES: tuple[str, ...] = (
 )
 
 
+SERVICE_CATALOG: tuple[dict[str, object], ...] = (
+    {
+        "id": "payment_core",
+        "label": "Card API",
+        "owner": "Applications",
+        "customer_facing": True,
+        "impact": "Payment transactions may fail, stall, or return application errors.",
+        "default_action": "Validate transaction flow, gateway health, and upstream issuer reachability.",
+        "keywords": (
+            "card api",
+            "payment api",
+            "issuer gateway",
+            "visa gateway",
+            "mastercard gateway",
+            "payment switch",
+            "transaction",
+            "card switch",
+        ),
+        "grafana_keywords": ("api", "payment", "transaction", "gateway", "latency"),
+        "kuma_keywords": ("card api", "payment api", "gateway", "transaction", "api"),
+    },
+    {
+        "id": "pos_network",
+        "label": "POS Network",
+        "owner": "Merchant Operations",
+        "customer_facing": True,
+        "impact": "Merchants may lose terminal connectivity or authorization speed.",
+        "default_action": "Check terminal reachability, site links, and merchant-facing error volume.",
+        "keywords": ("pos", "terminal", "merchant", "branch pos", "atm"),
+        "grafana_keywords": ("pos", "terminal", "merchant"),
+        "kuma_keywords": ("pos", "terminal", "merchant"),
+    },
+    {
+        "id": "external_connectivity",
+        "label": "External Connectivity",
+        "owner": "NOC",
+        "customer_facing": True,
+        "impact": "Upstream ISP or partner instability can degrade all external transaction paths.",
+        "default_action": "Check ISP/BGP state, upstream latency, and packet loss before escalating carriers.",
+        "keywords": (
+            "isp",
+            "bgp",
+            "internet",
+            "wan",
+            "upstream",
+            "dns",
+            "packet loss",
+            "latency",
+        ),
+        "grafana_keywords": ("wan", "internet", "latency", "packet loss", "external"),
+        "kuma_keywords": ("connectivity", "internet", "wan", "upstream", "external"),
+    },
+    {
+        "id": "core_network",
+        "label": "Core Network",
+        "owner": "Network Team",
+        "customer_facing": True,
+        "impact": "Core switching or routing issues can cascade across payment and branch services.",
+        "default_action": "Inspect core switches, interfaces, SNMP reachability, and recent link-state changes.",
+        "keywords": (
+            "switch",
+            "router",
+            "firewall",
+            "snmp",
+            "icmp",
+            "interface",
+            "uplink",
+            "link down",
+            "network",
+        ),
+        "grafana_keywords": ("network", "switch", "router", "interface", "uplink"),
+        "kuma_keywords": ("network", "switch", "router", "core"),
+    },
+    {
+        "id": "platform_compute",
+        "label": "Platform Compute",
+        "owner": "Infrastructure",
+        "customer_facing": False,
+        "impact": "Server, VM, storage, or database issues can become customer-facing if sustained.",
+        "default_action": "Validate host CPU, memory, disk, and database health before broader remediation.",
+        "keywords": (
+            "server",
+            "vm",
+            "cpu",
+            "memory",
+            "disk",
+            "database",
+            "mysql",
+            "storage",
+            "proliant",
+            "linux",
+            "windows",
+        ),
+        "grafana_keywords": ("inventory", "system", "trend", "host", "server", "database"),
+        "kuma_keywords": ("platform", "compute", "database", "server"),
+    },
+    {
+        "id": "observability_stack",
+        "label": "Observability Stack",
+        "owner": "SRE",
+        "customer_facing": False,
+        "impact": "Blind spots in monitoring or status publication reduce operator confidence and speed.",
+        "default_action": "Restore telemetry collection, dashboard access, and status-page synchronization.",
+        "keywords": ("grafana", "zabbix", "kuma", "monitor", "observability"),
+        "grafana_keywords": ("grafana", "dashboard", "observability"),
+        "kuma_keywords": ("kuma", "status page", "status"),
+    },
+)
+
+SERVICE_STATUS_RANK: dict[str, int] = {
+    "healthy": 0,
+    "watch": 1,
+    "degraded": 2,
+    "critical": 3,
+}
+
+PUBLIC_STATE_RANK: dict[str, int] = {
+    "operational": 0,
+    "degraded": 1,
+    "outage": 2,
+    "unknown": -1,
+}
+
+
 def extract_kuma_status_text(html: str) -> str:
     text = str(html or "")
     text_lower = text.lower()
@@ -174,6 +299,251 @@ def extract_kuma_status_text(html: str) -> str:
         if phrase.lower() in text_lower:
             return phrase
     return ""
+
+
+def _status_rank(state: str) -> int:
+    value = str(state or "").strip().lower()
+    mapping = {
+        "operational": 0,
+        "up": 0,
+        "ok": 0,
+        "healthy": 0,
+        "watch": 1,
+        "degraded": 1,
+        "degraded_performance": 1,
+        "partial": 1,
+        "partial_outage": 1,
+        "outage": 2,
+        "down": 2,
+        "major_outage": 2,
+        "critical": 2,
+    }
+    return mapping.get(value, 0)
+
+
+def _service_status_rank(state: str) -> int:
+    return SERVICE_STATUS_RANK.get(str(state or "").strip().lower(), 0)
+
+
+def _public_state_rank(state: str) -> int:
+    return PUBLIC_STATE_RANK.get(normalize_kuma_state(state), -1)
+
+
+def _public_state_to_recommendation(state: str) -> str:
+    normalized = normalize_kuma_state(state)
+    if normalized == "outage":
+        return "major_outage"
+    if normalized == "degraded":
+        return "degraded_performance"
+    return "up"
+
+
+def _append_unique(items: list[str], value: str | None, *, limit: int = 4) -> None:
+    text = str(value or "").strip()
+    if not text or text in items:
+        return
+    items.append(text)
+    if len(items) > limit:
+        del items[limit:]
+
+
+def _match_service_from_text(
+    text: str | None,
+    keyword_field: str = "keywords",
+    *,
+    default: str = "",
+) -> str:
+    haystack = str(text or "").strip().lower()
+    if not haystack:
+        return default
+
+    best_service = default
+    best_score = 0
+    for service in SERVICE_CATALOG:
+        score = 0
+        for keyword in service.get(keyword_field, ()) or ():
+            token = str(keyword or "").strip().lower()
+            if token and token in haystack:
+                score += max(2, len(token.split()))
+        if score > best_score:
+            best_score = score
+            best_service = str(service.get("id") or default)
+
+    if best_score:
+        return best_service
+
+    if any(marker in haystack for marker in ("cpu", "memory", "disk", "server", "vm", "database", "host")):
+        return "platform_compute"
+    if any(marker in haystack for marker in ("switch", "router", "snmp", "icmp", "link", "uplink")):
+        return "core_network"
+    if any(marker in haystack for marker in ("transaction", "gateway", "payment", "issuer")):
+        return "payment_core"
+    return default
+
+
+def _service_status_to_public_state(service: dict) -> str:
+    if not bool(service.get("customer_facing")):
+        return "operational"
+    state = str(service.get("status") or "healthy")
+    if state == "critical":
+        return "outage"
+    if state in {"degraded", "watch"}:
+        return "degraded"
+    return "operational"
+
+
+def _promote_service_status(service: dict, new_state: str) -> None:
+    current = str(service.get("status") or "healthy")
+    if _service_status_rank(new_state) > _service_status_rank(current):
+        service["status"] = new_state
+
+
+def _blank_service_board() -> dict[str, dict]:
+    board: dict[str, dict] = {}
+    for service in SERVICE_CATALOG:
+        service_id = str(service["id"])
+        board[service_id] = {
+            "id": service_id,
+            "label": str(service["label"]),
+            "owner": str(service["owner"]),
+            "customer_facing": bool(service["customer_facing"]),
+            "impact": str(service["impact"]),
+            "default_action": str(service["default_action"]),
+            "status": "healthy",
+            "issue_count": 0,
+            "critical_signals": 0,
+            "expected_public_state": "operational",
+            "current_public_state": "unknown",
+            "kuma_alignment": "unknown",
+            "source_states": {
+                "zabbix": "clear",
+                "grafana": "unknown",
+                "kuma": "unknown",
+            },
+            "matched_dashboards": [],
+            "matched_groups": [],
+            "evidence": [],
+            "next_actions": [],
+        }
+    return board
+
+
+def build_service_monitoring_board(zabbix: dict, grafana: dict, kuma: dict) -> list[dict]:
+    board = _blank_service_board()
+
+    if str(zabbix.get("status") or "unknown") == "error":
+        service = board["observability_stack"]
+        _promote_service_status(service, "degraded")
+        service["source_states"]["zabbix"] = "unavailable"
+        _append_unique(service["evidence"], "Zabbix API is unavailable, so service correlation fidelity is reduced.")
+        _append_unique(service["next_actions"], service["default_action"])
+
+    for problem in (zabbix.get("top_problems") or [])[:8]:
+        if not isinstance(problem, dict):
+            continue
+        host = str(problem.get("host") or "unknown-host")
+        name = str(problem.get("name") or "Unnamed problem")
+        severity = int(problem.get("severity") or 0)
+        service_id = _match_service_from_text(f"{host} {name}", "keywords", default="platform_compute")
+        service = board.get(service_id) or board["platform_compute"]
+        service["issue_count"] = int(service.get("issue_count") or 0) + 1
+        if severity >= 4:
+            service["critical_signals"] = int(service.get("critical_signals") or 0) + 1
+        service["source_states"]["zabbix"] = "active_alerts"
+        _promote_service_status(
+            service,
+            "critical" if severity >= 4 else "degraded" if severity >= 2 else "watch",
+        )
+        _append_unique(service["evidence"], f"{host} :: {name}")
+        _append_unique(service["next_actions"], service["default_action"])
+
+    grafana_stack = board["observability_stack"]
+    grafana_status = str(grafana.get("status") or "unknown")
+    grafana_auth = str(grafana.get("auth_status") or "unknown")
+    if grafana_status == "ok":
+        grafana_stack["source_states"]["grafana"] = "telemetry_ready"
+        _append_unique(grafana_stack["evidence"], "Grafana API is reachable and telemetry summaries are available.")
+    elif grafana_status != "not_configured":
+        grafana_stack["source_states"]["grafana"] = "degraded"
+        _promote_service_status(grafana_stack, "critical" if grafana_status == "error" else "degraded")
+        _append_unique(
+            grafana_stack["evidence"],
+            "Grafana API health is "
+            + str(grafana.get("api_health") or grafana_status)
+            + (f" ({grafana_auth.replace('_', ' ')})" if grafana_auth not in {"", "unknown", "not_configured"} else ""),
+        )
+        _append_unique(grafana_stack["next_actions"], grafana_stack["default_action"])
+
+    for item in (grafana.get("dashboards") or [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "Untitled")
+        service_id = _match_service_from_text(title, "grafana_keywords")
+        if not service_id:
+            continue
+        service = board.get(service_id)
+        if not service:
+            continue
+        service["source_states"]["grafana"] = "telemetry_ready"
+        _append_unique(service["matched_dashboards"], title, limit=3)
+        _append_unique(service["evidence"], f"Grafana dashboard available: {title}", limit=5)
+
+    kuma_status = str(kuma.get("status") or "unknown")
+    kuma_groups = kuma.get("groups") or []
+    if kuma_status == "error":
+        grafana_stack["source_states"]["kuma"] = "unavailable"
+        _promote_service_status(grafana_stack, "degraded")
+        _append_unique(grafana_stack["evidence"], "Kuma public status API is unavailable.")
+        _append_unique(grafana_stack["next_actions"], grafana_stack["default_action"])
+
+    for group in kuma_groups[:10]:
+        if not isinstance(group, dict):
+            continue
+        label = str(group.get("label") or "Public Group")
+        service_id = _match_service_from_text(label, "kuma_keywords")
+        if not service_id:
+            continue
+        service = board.get(service_id)
+        if not service:
+            continue
+        group_state = normalize_kuma_state(group.get("status"))
+        if _public_state_rank(group_state) > _public_state_rank(service.get("current_public_state")):
+            service["current_public_state"] = group_state
+        service["source_states"]["kuma"] = "published"
+        _append_unique(service["matched_groups"], label, limit=3)
+        if group_state == "outage":
+            _promote_service_status(service, "degraded")
+            _append_unique(service["evidence"], f"Kuma group '{label}' is published as Major Service Outage.")
+        elif group_state == "degraded":
+            _promote_service_status(service, "watch")
+            _append_unique(service["evidence"], f"Kuma group '{label}' is published as Degraded Performance.")
+
+    kuma_overall = normalize_kuma_state(kuma.get("page_state") or kuma.get("status_text"))
+    for service in board.values():
+        service["expected_public_state"] = _service_status_to_public_state(service)
+        if service.get("current_public_state") == "unknown":
+            if bool(service.get("customer_facing")) and service.get("expected_public_state") != "operational":
+                service["kuma_alignment"] = "unmapped"
+            elif kuma_overall != "unknown" and not bool(service.get("customer_facing")):
+                service["kuma_alignment"] = "internal_only"
+            else:
+                service["kuma_alignment"] = "unknown"
+        elif normalize_kuma_state(service.get("current_public_state")) == normalize_kuma_state(service.get("expected_public_state")):
+            service["kuma_alignment"] = "aligned"
+        else:
+            service["kuma_alignment"] = "mismatch"
+
+    services = list(board.values())
+    services.sort(
+        key=lambda item: (
+            -_service_status_rank(str(item.get("status") or "healthy")),
+            -int(item.get("critical_signals") or 0),
+            -int(item.get("issue_count") or 0),
+            0 if item.get("customer_facing") else 1,
+            str(item.get("label") or ""),
+        )
+    )
+    return services
 
 
 def dashboard_access_state(result: dict | None) -> str:
@@ -318,20 +688,26 @@ async def collect_monitoring_snapshot(cfg: dict | None) -> dict:
             "problem.get",
             {
                 "output": ["eventid", "name", "severity"],
+                "selectHosts": ["host", "name"],
                 "recent": True,
                 "sortfield": "eventid",
                 "sortorder": "DESC",
-                "limit": 8,
+                "limit": 12,
             },
         )
         if isinstance(problems, list):
             top_problems = []
-            for item in problems[:8]:
+            for item in problems[:12]:
+                hosts = item.get("hosts") if isinstance(item, dict) else []
+                first_host = ""
+                if isinstance(hosts, list) and hosts:
+                    host_row = hosts[0] if isinstance(hosts[0], dict) else {}
+                    first_host = str(host_row.get("host") or host_row.get("name") or "").strip()
                 top_problems.append(
                     {
                         "name": item.get("name", "Unknown problem"),
                         "severity": int(item.get("severity") or 0),
-                        "host": "",
+                        "host": first_host,
                     }
                 )
             snapshot["zabbix"] = {
@@ -615,35 +991,37 @@ async def build_monitoring_overview(cfg: dict | None) -> dict:
     grafana = await collect_grafana_overview(cfg, snapshot)
     seed_summary = summarize_monitoring_snapshot(snapshot)
     kuma = await collect_kuma_overview(cfg, seed_summary)
-    summary = summarize_monitoring_sources(snapshot, zabbix, grafana, kuma)
+    services = build_service_monitoring_board(zabbix, grafana, kuma)
+    summary = summarize_monitoring_sources(snapshot, zabbix, grafana, kuma, services)
+    kuma["recommended_state"] = str(summary.get("recommended_kuma_state") or kuma.get("recommended_state") or "up")
+    kuma["recommended_note"] = str(summary.get("recommended_kuma_note") or kuma.get("recommended_note") or "")
+    episodes = [
+        {
+            "service_id": item.get("id"),
+            "label": item.get("label"),
+            "status": item.get("status"),
+            "owner": item.get("owner"),
+            "issue_count": int(item.get("issue_count") or 0),
+            "customer_facing": bool(item.get("customer_facing")),
+            "expected_public_state": item.get("expected_public_state"),
+            "current_public_state": item.get("current_public_state"),
+            "summary": (item.get("evidence") or ["No evidence collected yet."])[0],
+            "next_action": (item.get("next_actions") or [item.get("default_action") or "Review the live signals."])[0],
+        }
+        for item in services
+        if str(item.get("status") or "healthy") != "healthy"
+    ]
     return {
         "snapshot": snapshot,
         "summary": summary,
+        "services": services,
+        "episodes": episodes,
         "sources": {
             "zabbix": zabbix,
             "grafana": grafana,
             "kuma": kuma,
         },
     }
-
-
-def _status_rank(state: str) -> int:
-    value = str(state or "").strip().lower()
-    mapping = {
-        "operational": 0,
-        "up": 0,
-        "ok": 0,
-        "degraded": 1,
-        "degraded_performance": 1,
-        "partial": 1,
-        "partial_outage": 1,
-        "outage": 2,
-        "down": 2,
-        "major_outage": 2,
-        "critical": 2,
-    }
-    return mapping.get(value, 0)
-
 
 def _kuma_status_to_page_status(state: str) -> str:
     value = str(state or "").strip().lower()
@@ -664,6 +1042,7 @@ async def sync_kuma_override(cfg: dict | None, overview: dict | None) -> dict:
     zabbix = (data.get("sources") or {}).get("zabbix") or {}
     grafana = (data.get("sources") or {}).get("grafana") or {}
     kuma = (data.get("sources") or {}).get("kuma") or {}
+    services = data.get("services") or []
 
     grafana_status = "operational"
     if grafana.get("status") in {"error"}:
@@ -671,15 +1050,31 @@ async def sync_kuma_override(cfg: dict | None, overview: dict | None) -> dict:
     elif grafana.get("auth_status") == "invalid_credentials" or grafana.get("dashboard_access") in {"embed_blocked", "login_required"}:
         grafana_status = "degraded"
 
+    service_groups: dict[str, dict] = {}
+    for item in services:
+        if not isinstance(item, dict) or not item.get("customer_facing"):
+            continue
+        service_groups[str(item.get("id") or item.get("label") or "service")] = {
+            "label": str(item.get("label") or "Service"),
+            "status": normalize_kuma_state(item.get("expected_public_state") or "operational"),
+            "owner": str(item.get("owner") or ""),
+            "issue_count": int(item.get("issue_count") or 0),
+            "critical_signals": int(item.get("critical_signals") or 0),
+            "kuma_alignment": str(item.get("kuma_alignment") or "unknown"),
+            "impact": str(item.get("impact") or ""),
+            "evidence": list(item.get("evidence") or [])[:2],
+        }
+
     payload = {
         "source": "noc-sentinel",
-        "derived_at": int(__import__("time").time()),
+        "derived_at": int(time.time()),
         "overall_status": _kuma_status_to_page_status(summary.get("recommended_kuma_state") or "up"),
         "headline": str(summary.get("headline") or ""),
         "recommended_kuma_state": str(summary.get("recommended_kuma_state") or "up"),
         "recommended_kuma_note": str(summary.get("recommended_kuma_note") or ""),
         "expires_in_seconds": 420,
-        "groups": {
+        "groups": service_groups,
+        "source_groups": {
             "zabbix": {
                 "status": _kuma_status_to_page_status(summary.get("recommended_kuma_state") or "up"),
                 "problem_count": int(zabbix.get("problem_count") or 0),
@@ -698,6 +1093,7 @@ async def sync_kuma_override(cfg: dict | None, overview: dict | None) -> dict:
                 "status_text": str(kuma.get("status_text") or ""),
             },
         },
+        "service_count": len(service_groups),
         "abnormalities": list(summary.get("abnormalities") or []),
     }
 
@@ -819,32 +1215,50 @@ def summarize_monitoring_sources(
     zabbix: dict,
     grafana: dict,
     kuma: dict,
+    services: list[dict] | None = None,
 ) -> dict:
     problem_count = int(zabbix.get("problem_count") or 0)
+    service_rows = list(services or [])
+    affected_services = [item for item in service_rows if str(item.get("status") or "healthy") != "healthy"]
+    customer_facing_issues = [
+        item for item in service_rows
+        if bool(item.get("customer_facing")) and normalize_kuma_state(item.get("expected_public_state")) != "operational"
+    ]
+    internal_issues = [
+        item for item in affected_services
+        if not bool(item.get("customer_facing"))
+    ]
     abnormalities: list[str] = []
     actions: list[str] = []
-    overall_status = "healthy"
+
+    highest_service_rank = max(
+        (_service_status_rank(str(item.get("status") or "healthy")) for item in service_rows),
+        default=0,
+    )
+    if highest_service_rank >= 3:
+        overall_status = "critical"
+    elif highest_service_rank >= 1:
+        overall_status = "degraded"
+    else:
+        overall_status = "healthy"
+
+    for item in affected_services[:4]:
+        evidence = (item.get("evidence") or ["No correlated evidence yet."])[0]
+        abnormalities.append(
+            f"{item.get('label')}: {evidence}"
+        )
+        next_action = (item.get("next_actions") or [item.get("default_action") or "Review live signals."])[0]
+        actions.append(f"{item.get('label')}: {next_action}")
 
     if str(zabbix.get("status") or "unknown") == "error":
-        abnormalities.append("Zabbix API is unavailable.")
-        overall_status = "critical"
-    elif problem_count > 0:
-        abnormalities.append(f"{problem_count} active Zabbix problem(s) detected.")
-        overall_status = "critical" if problem_count >= 5 else "degraded"
-        top_problem = ((zabbix.get("top_problems") or [])[:1] or [None])[0]
-        if isinstance(top_problem, dict):
-            actions.append(
-                "Start with Zabbix: "
-                + str(top_problem.get("host") or "unknown-host")
-                + " -> "
-                + str(top_problem.get("name") or "Unnamed problem")
-            )
+        abnormalities.append("Zabbix API is unavailable, so service correlation is partially degraded.")
+        if overall_status != "critical":
+            overall_status = "degraded"
 
     grafana_api_health = str(grafana.get("api_health") or "unknown")
-    grafana_status = str(grafana.get("status") or "unknown")
-    if grafana_status == "error" or grafana_api_health not in {"ok", "unknown"}:
-        abnormalities.append("Grafana API data is not fully available.")
-        if overall_status != "critical":
+    if str(grafana.get("status") or "unknown") == "error" or grafana_api_health not in {"ok", "unknown"}:
+        abnormalities.append("Grafana telemetry is not fully available for correlation.")
+        if overall_status == "healthy":
             overall_status = "degraded"
     elif int(grafana.get("dashboard_count") or 0) > 0:
         titles = [
@@ -855,44 +1269,98 @@ def summarize_monitoring_sources(
         if titles:
             actions.append("Grafana dashboards ready: " + ", ".join(titles))
 
-    kuma_status = str(kuma.get("status") or "unknown")
     kuma_public_state = normalize_kuma_state(kuma.get("page_state") or kuma.get("status_text"))
-    expected_kuma_state = _kuma_status_to_page_status(
-        "major_outage" if overall_status == "critical"
-        else "degraded_performance" if overall_status == "degraded"
-        else "up"
-    )
-    kuma_alignment = "aligned"
-    if kuma_status == "error":
+    if str(kuma.get("status") or "unknown") == "error":
         abnormalities.append("Kuma public status API is unavailable.")
-        if overall_status != "critical":
+        if overall_status == "healthy":
             overall_status = "degraded"
-        kuma_alignment = "unknown"
-    elif kuma_public_state != "unknown" and expected_kuma_state != kuma_public_state:
-        kuma_alignment = "mismatch"
+
+    mismatch_services = [
+        item for item in service_rows
+        if bool(item.get("customer_facing")) and str(item.get("kuma_alignment") or "") == "mismatch"
+    ]
+    unmapped_services = [
+        item for item in service_rows
+        if bool(item.get("customer_facing")) and str(item.get("kuma_alignment") or "") == "unmapped"
+    ]
+
+    if mismatch_services:
+        mismatched = mismatch_services[0]
         abnormalities.append(
-            "Kuma public status is "
-            + humanize_kuma_state(kuma_public_state)
+            "Kuma still shows "
+            + str(mismatched.get("label") or "a customer-facing service")
+            + " as "
+            + humanize_kuma_state(mismatched.get("current_public_state") or "unknown")
             + " while NOC expects "
-            + humanize_kuma_state(expected_kuma_state)
+            + humanize_kuma_state(mismatched.get("expected_public_state") or "unknown")
             + "."
         )
         if overall_status == "healthy":
             overall_status = "degraded"
+    elif unmapped_services:
+        unmapped = unmapped_services[0]
+        abnormalities.append(
+            "Kuma does not expose a mapped public group for "
+            + str(unmapped.get("label") or "a customer-facing service")
+            + "."
+        )
+        if overall_status == "healthy":
+            overall_status = "degraded"
+
+    expected_public_state = "operational"
+    for item in customer_facing_issues:
+        candidate = normalize_kuma_state(item.get("expected_public_state") or "operational")
+        if _public_state_rank(candidate) > _public_state_rank(expected_public_state):
+            expected_public_state = candidate
+
+    recommended_kuma_state = _public_state_to_recommendation(expected_public_state)
+    if customer_facing_issues:
+        labels = ", ".join(str(item.get("label") or "Service") for item in customer_facing_issues[:3])
+        recommended_kuma_note = (
+            "Customer-facing services need a public update: "
+            + labels
+            + "."
+        )
+    elif internal_issues:
+        labels = ", ".join(str(item.get("label") or "Service") for item in internal_issues[:3])
+        recommended_kuma_note = (
+            "Internal services are degraded ("
+            + labels
+            + "), but public status can remain operational unless customer impact is confirmed."
+        )
+    else:
+        recommended_kuma_note = "Core services are healthy and public status can remain operational."
+
+    if customer_facing_issues:
+        top = customer_facing_issues[0]
+        headline = (
+            str(top.get("label") or "Customer-facing service")
+            + " is "
+            + str(top.get("status") or "degraded")
+            + " and needs immediate attention."
+        )
+    elif affected_services:
+        top = affected_services[0]
+        headline = (
+            str(top.get("label") or "Service")
+            + " needs attention before it becomes customer-facing."
+        )
+    else:
+        headline = "Core services are healthy and the monitoring stack is aligned."
+
     if int(kuma.get("problem_count") or 0) > 0:
         actions.append(f"Kuma public page already shows {int(kuma.get('problem_count') or 0)} public issue(s).")
 
-    if not abnormalities:
-        headline = "Monitoring sources are aligned and currently healthy."
-    else:
-        headline = abnormalities[0]
-
-    recommended_kuma_state = (
-        "major_outage" if overall_status == "critical"
-        else "degraded_performance" if overall_status == "degraded"
-        else "up"
-    )
-    recommended_kuma_note = " ".join((abnormalities or [headline])[:2])
+    global_kuma_alignment = "aligned"
+    if mismatch_services:
+        global_kuma_alignment = "mismatch"
+    elif unmapped_services:
+        global_kuma_alignment = "unmapped"
+    elif (
+        expected_public_state == "operational"
+        and kuma_public_state not in {"unknown", "operational"}
+    ):
+        global_kuma_alignment = "mismatch"
 
     return {
         "overall_status": overall_status,
@@ -903,7 +1371,18 @@ def summarize_monitoring_sources(
         "recommended_kuma_note": recommended_kuma_note,
         "problem_count": problem_count,
         "kuma_public_state": kuma_public_state,
-        "kuma_alignment": kuma_alignment,
+        "kuma_alignment": global_kuma_alignment,
+        "affected_services": [
+            {
+                "id": item.get("id"),
+                "label": item.get("label"),
+                "status": item.get("status"),
+                "expected_public_state": item.get("expected_public_state"),
+                "current_public_state": item.get("current_public_state"),
+            }
+            for item in affected_services[:5]
+        ],
+        "customer_facing_count": len(customer_facing_issues),
     }
 
 

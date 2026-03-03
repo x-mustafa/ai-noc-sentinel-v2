@@ -256,11 +256,13 @@
     const snapshot = data.snapshot || {};
     const summary = data.summary || {};
     const sources = data.sources || {};
+    const services = Array.isArray(data.services) ? data.services : [];
     const kumaSync = data.kuma_sync || {};
     const activeTab = document.querySelector('#page-observability .filter-btn.active');
     const currentTarget = activeTab?.id?.replace('obs-tab-', '') || 'summary';
     const targetState = (snapshot.dashboards || {})[currentTarget] || {};
     const topProblems = ((snapshot.zabbix || {}).top_problems || []).slice(0, 3);
+    const topServices = services.filter((item) => String(item?.status || 'healthy') !== 'healthy').slice(0, 3);
     const accent = summary.overall_status === 'critical'
       ? '#f87171'
       : summary.overall_status === 'degraded'
@@ -268,6 +270,9 @@
         : '#4ade80';
     const list = topProblems.length
       ? `<div style="margin-top:8px;color:#d6e4fb">${topProblems.map((item) => `- ${escText(item.name || 'Unnamed problem')}`).join('<br>')}</div>`
+      : '';
+    const serviceList = topServices.length
+      ? `<div style="margin-top:8px;color:#d6e4fb">${topServices.map((item) => `- ${escText(item.label || 'Service')} :: ${escText(serviceStatusLabel(item.status || 'healthy'))}`).join('<br>')}</div>`
       : '';
     const zbx = sources.zabbix || {};
     const grafana = sources.grafana || {};
@@ -304,6 +309,7 @@
           <div style="margin-top:4px;color:#b8c9e0">Recommended Kuma state: ${escText(summary.recommended_kuma_state || 'up')}.</div>
           ${sourceGrid}
           ${syncLine}
+          ${serviceList}
           ${list}
         </div>
       `,
@@ -362,6 +368,45 @@
     return String(kuma?.status_text || kuma?.page_state || kuma?.status || 'Unknown');
   }
 
+  function serviceStatusColor(status) {
+    const raw = String(status || 'healthy');
+    if (raw === 'critical') {
+      return '#f87171';
+    }
+    if (raw === 'degraded' || raw === 'watch') {
+      return '#fbbf24';
+    }
+    return '#4ade80';
+  }
+
+  function serviceStatusLabel(status) {
+    const raw = String(status || 'healthy');
+    if (raw === 'critical') {
+      return 'Critical';
+    }
+    if (raw === 'degraded') {
+      return 'Degraded';
+    }
+    if (raw === 'watch') {
+      return 'Watch';
+    }
+    return 'Healthy';
+  }
+
+  function servicePublicStateLabel(state) {
+    const raw = String(state || 'unknown');
+    if (raw === 'operational') {
+      return 'Operational';
+    }
+    if (raw === 'degraded') {
+      return 'Degraded';
+    }
+    if (raw === 'outage') {
+      return 'Major Outage';
+    }
+    return raw.replace(/_/g, ' ');
+  }
+
   window.obsOpenNamedExternal = function (target) {
     const url = typeof window.obsGetUrl === 'function' ? window.obsGetUrl(target) : '';
     if (!url) {
@@ -402,17 +447,88 @@
 
     const summary = data.summary || {};
     const sources = data.sources || {};
+    const services = Array.isArray(data.services) ? data.services : [];
+    const episodes = Array.isArray(data.episodes) ? data.episodes : [];
     const zabbix = sources.zabbix || {};
     const grafana = sources.grafana || {};
     const kuma = sources.kuma || {};
     const kumaSync = data.kuma_sync || {};
     const overallColor = sourceStatusColor(summary.overall_status);
-    const topProblems = Array.isArray(zabbix.top_problems) ? zabbix.top_problems.slice(0, 5) : [];
     const dashboards = Array.isArray(grafana.dashboards) ? grafana.dashboards.slice(0, 6) : [];
-    const kumaGroups = Array.isArray(kuma.groups) ? kuma.groups.slice(0, 6) : [];
     const actions = Array.isArray(summary.actions) ? summary.actions.slice(0, 5) : [];
     const syncMessage = formatKumaSyncMessage(kumaSync);
     const syncTone = sourceStatusColor(kumaSync.ok ? 'ok' : kumaSync.status || 'warning');
+    const affectedServices = services.filter((item) => String(item?.status || 'healthy') !== 'healthy');
+    const customerFacing = services.filter((item) => Boolean(item?.customer_facing));
+    const serviceRows = services.length
+      ? services.map((service) => {
+          const tone = serviceStatusColor(service.status);
+          const evidence = Array.isArray(service.evidence) ? service.evidence.slice(0, 2) : [];
+          const nextActions = Array.isArray(service.next_actions) ? service.next_actions.slice(0, 1) : [];
+          const dashboardsForService = Array.isArray(service.matched_dashboards) ? service.matched_dashboards.slice(0, 2) : [];
+          const groupsForService = Array.isArray(service.matched_groups) ? service.matched_groups.slice(0, 2) : [];
+          const sourceStates = service.source_states || {};
+          const publicLine = service.customer_facing
+            ? `<div style="margin-top:6px;color:#9fb3cf">Public: <span style="color:#e5eefc">${escText(servicePublicStateLabel(service.expected_public_state))}</span> expected, <span style="color:${sourceStatusColor(service.kuma_alignment)}">${escText(servicePublicStateLabel(service.current_public_state))}</span> live</div>`
+            : `<div style="margin-top:6px;color:#9fb3cf">Internal-only service. Public state stays operational unless customer impact is confirmed.</div>`;
+          const evidenceBlock = evidence.length
+            ? `<div style="margin-top:8px;color:#dbe8fb;line-height:1.6">${evidence.map((item) => `- ${escText(item)}`).join('<br>')}</div>`
+            : `<div style="margin-top:8px;color:#9fb3cf;line-height:1.6">No correlated evidence yet.</div>`;
+          const telemetryLine = dashboardsForService.length
+            ? `<div style="margin-top:6px;color:#7dd3fc">Grafana: ${dashboardsForService.map((item) => escText(item)).join(' | ')}</div>`
+            : '';
+          const publicGroupLine = groupsForService.length
+            ? `<div style="margin-top:6px;color:#c4b5fd">Kuma: ${groupsForService.map((item) => escText(item)).join(' | ')}</div>`
+            : '';
+          const actionLine = nextActions.length
+            ? `<div style="margin-top:8px;color:#e5eefc"><span style="color:var(--muted)">Next:</span> ${escText(nextActions[0])}</div>`
+            : '';
+          return `
+            <div style="border:1px solid ${tone}33;border-radius:14px;padding:12px 14px;background:rgba(255,255,255,0.02)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#fff">${escText(service.label || 'Service')}</div>
+                  <div style="margin-top:4px;color:var(--muted);font-size:10px">${escText(service.owner || 'Unknown owner')}</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                  <span style="padding:3px 8px;border-radius:999px;border:1px solid ${tone}44;color:${tone};font-size:10px;font-weight:700">${escText(serviceStatusLabel(service.status))}</span>
+                  <span style="padding:3px 8px;border-radius:999px;border:1px solid rgba(255,255,255,0.08);color:#c8d7ed;font-size:10px">${escText(String(service.issue_count || 0))} signals</span>
+                  <span style="padding:3px 8px;border-radius:999px;border:1px solid rgba(255,255,255,0.08);color:${sourceStatusColor(service.kuma_alignment)};font-size:10px">${escText(String(service.kuma_alignment || 'unknown').replace(/_/g, ' '))}</span>
+                </div>
+              </div>
+              <div style="margin-top:8px;color:#dbe8fb;line-height:1.6">${escText(service.impact || '')}</div>
+              ${publicLine}
+              <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+                <span style="padding:3px 7px;border-radius:999px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);font-size:10px;color:${sourceStatusColor(sourceStates.zabbix === 'active_alerts' ? 'error' : sourceStates.zabbix === 'unavailable' ? 'warning' : 'ok')}">Zabbix: ${escText(String(sourceStates.zabbix || 'unknown').replace(/_/g, ' '))}</span>
+                <span style="padding:3px 7px;border-radius:999px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);font-size:10px;color:${sourceStatusColor(sourceStates.grafana === 'telemetry_ready' ? 'ok' : sourceStates.grafana === 'degraded' ? 'warning' : 'unsupported')}">Grafana: ${escText(String(sourceStates.grafana || 'unknown').replace(/_/g, ' '))}</span>
+                <span style="padding:3px 7px;border-radius:999px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);font-size:10px;color:${sourceStatusColor(sourceStates.kuma === 'published' ? 'ok' : sourceStates.kuma === 'unavailable' ? 'warning' : 'unsupported')}">Kuma: ${escText(String(sourceStates.kuma || 'unknown').replace(/_/g, ' '))}</span>
+              </div>
+              ${evidenceBlock}
+              ${telemetryLine}
+              ${publicGroupLine}
+              ${actionLine}
+            </div>
+          `;
+        }).join('')
+      : '<div style="padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:#9fb3cf">No service model data is available yet.</div>';
+    const episodeRows = episodes.length
+      ? episodes.slice(0, 5).map((item) => `
+          <div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div style="font-size:11px;font-weight:700;color:#fff">${escText(item.label || 'Service')}</div>
+              <div style="font-size:10px;color:${serviceStatusColor(item.status)}">${escText(serviceStatusLabel(item.status))}</div>
+            </div>
+            <div style="margin-top:5px;color:#9fb3cf;font-size:10px">${escText(item.owner || 'Unknown owner')} • ${escText(String(item.issue_count || 0))} signal(s)</div>
+            <div style="margin-top:6px;color:#dbe8fb;font-size:11px;line-height:1.6">${escText(item.summary || 'No summary available.')}</div>
+            <div style="margin-top:6px;color:#e5eefc;font-size:11px;line-height:1.6"><span style="color:var(--muted)">Action:</span> ${escText(item.next_action || 'Review the live signals.')}</div>
+          </div>
+        `).join('')
+      : '<div style="color:#9fb3cf;line-height:1.7">No active correlated service episodes. The service model currently sees no degraded or critical services.</div>';
+    const sourceNotes = [
+      `Zabbix: ${String(zabbix.problem_count || 0)} active problems across ${String(zabbix.host_count || 0)} hosts.`,
+      `Grafana: ${String(grafana.status || 'unknown')} with ${String(grafana.dashboard_count || 0)} dashboards visible.`,
+      `Kuma: ${kumaPublicStateLabel(kuma)} across ${String(kuma.group_count || 0)} public groups.`,
+    ];
 
     frame.style.display = 'none';
     frame.removeAttribute('src');
@@ -424,7 +540,7 @@
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
           <div>
             <div style="font-size:14px;font-weight:700;color:#fff">Monitoring Home</div>
-            <div style="margin-top:6px;color:#9fb3cf;font-size:11px;line-height:1.7">Centralized NOC state using live Zabbix alarms, Grafana API data, and Kuma public status.</div>
+            <div style="margin-top:6px;color:#9fb3cf;font-size:11px;line-height:1.7">Service-first NOC board that correlates Zabbix alarms, Grafana telemetry, and Kuma public state into operator-owned services.</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.7px;color:var(--muted)">Overall</div>
@@ -436,61 +552,44 @@
           <div style="font-size:11px;font-weight:700;color:#e5eefc">Current Signal</div>
           <div style="margin-top:6px;color:#dbe8fb;font-size:11px;line-height:1.7">${escText(summary.headline || 'No active issues detected.')}</div>
           <div style="margin-top:8px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
-            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Zabbix</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:${sourceStatusColor((zabbix.problem_count || 0) ? 'error' : 'ok')}">${escText(String(zabbix.problem_count || 0))} problems</div></div>
-            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Grafana</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:${sourceStatusColor(grafana.status)}">${escText(grafana.status || 'unknown')}</div></div>
-            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Kuma Public</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:${sourceStatusColor(summary.kuma_alignment)}">${escText(kumaPublicStateLabel(kuma))}</div></div>
-            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Expected Kuma</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:#7dd3fc">${escText(String(summary.recommended_kuma_state || 'up').replace(/_/g, ' '))}</div></div>
+            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Services At Risk</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:${affectedServices.length ? '#f87171' : '#4ade80'}">${escText(String(affectedServices.length))}</div></div>
+            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Customer-Facing</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:${summary.customer_facing_count ? '#fbbf24' : '#4ade80'}">${escText(String(summary.customer_facing_count || 0))}</div></div>
+            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Kuma Live</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:${sourceStatusColor(summary.kuma_alignment)}">${escText(kumaPublicStateLabel(kuma))}</div></div>
+            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Kuma Target</div><div style="margin-top:4px;font-size:12px;font-weight:700;color:#7dd3fc">${escText(servicePublicStateLabel(String(summary.recommended_kuma_state || 'up').replace('major_outage', 'outage').replace('degraded_performance', 'degraded').replace('up', 'operational')))}</div></div>
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+        <div style="display:grid;grid-template-columns:1.45fr 1fr;gap:14px;margin-top:14px;align-items:start">
           <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
-            <div style="font-size:11px;font-weight:700;color:#fff">Zabbix Signal</div>
-            <div style="margin-top:8px;display:grid;grid-template-columns:1fr auto;gap:8px;color:#dbe8fb;font-size:11px">
-              <div style="color:var(--muted)">Hosts</div><div>${escText(String(zabbix.host_count || 0))}</div>
-              <div style="color:var(--muted)">Active Problems</div><div style="color:${(zabbix.problem_count || 0) ? '#f87171' : '#4ade80'}">${escText(String(zabbix.problem_count || 0))}</div>
-              <div style="color:var(--muted)">Critical</div><div>${escText(String(zabbix.critical_problem_count || 0))}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <div style="font-size:11px;font-weight:700;color:#fff">Service Board</div>
+              <div style="font-size:10px;color:var(--muted)">${escText(String(customerFacing.length))} modeled services • ${escText(String(affectedServices.length))} active</div>
             </div>
-            <div style="margin-top:10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Top Problems</div>
-            <div style="margin-top:6px;color:#dbe8fb;font-size:11px;line-height:1.7">${topProblems.length ? topProblems.map((item) => `- ${escText(item.host || 'host')} :: ${escText(item.name || 'Unnamed problem')}`).join('<br>') : 'No active Zabbix problems.'}</div>
+            <div style="margin-top:10px;display:grid;gap:10px">${serviceRows}</div>
           </div>
 
-          <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
-            <div style="font-size:11px;font-weight:700;color:#fff">Grafana Signal</div>
-            <div style="margin-top:8px;display:grid;grid-template-columns:1fr auto;gap:8px;color:#dbe8fb;font-size:11px">
-              <div style="color:var(--muted)">Service</div><div style="color:${sourceStatusColor(grafana.status)}">${escText(grafana.status || 'unknown')}</div>
-              <div style="color:var(--muted)">API Health</div><div>${escText(grafana.api_health || 'unknown')}</div>
-              <div style="color:var(--muted)">Auth</div><div>${escText(grafanaAuthStateLabel(grafana))}</div>
-              <div style="color:var(--muted)">Version</div><div>${escText(grafana.version || 'unknown')}</div>
-              <div style="color:var(--muted)">Dashboards</div><div>${escText(String(grafana.dashboard_count || 0))}</div>
+          <div style="display:grid;gap:14px">
+            <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
+              <div style="font-size:11px;font-weight:700;color:#fff">Correlated Episodes</div>
+              <div style="margin-top:8px;color:#dbe8fb;font-size:11px;line-height:1.7">${episodeRows}</div>
             </div>
-            <div style="margin-top:10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Available Dashboards</div>
-            <div style="margin-top:6px;color:#dbe8fb;font-size:11px;line-height:1.7">${dashboards.length ? dashboards.map((item) => `- ${escText(item.title || 'Untitled')}`).join('<br>') : 'No dashboard list available.'}</div>
-          </div>
-
-          <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
-            <div style="font-size:11px;font-weight:700;color:#fff">Kuma Public State</div>
-            <div style="margin-top:8px;display:grid;grid-template-columns:1fr auto;gap:8px;color:#dbe8fb;font-size:11px">
-              <div style="color:var(--muted)">Public State</div><div style="color:${sourceStatusColor(summary.kuma_alignment)}">${escText(kumaPublicStateLabel(kuma))}</div>
-              <div style="color:var(--muted)">API Status</div><div>${escText(kuma.api_status || kuma.status || 'unknown')}</div>
-              <div style="color:var(--muted)">Groups</div><div>${escText(String(kuma.group_count || 0))}</div>
-              <div style="color:var(--muted)">Public Problems</div><div>${escText(String(kuma.problem_count || 0))}</div>
+            <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
+              <div style="font-size:11px;font-weight:700;color:#fff">Kuma Sync</div>
+              <div style="margin-top:8px;font-size:12px;font-weight:700;color:${syncTone}">${escText(kumaSync.ok ? 'SYNCED' : String(kumaSync.status || 'unknown').toUpperCase())}</div>
+              <div style="margin-top:8px;color:#dbe8fb;font-size:11px;line-height:1.7">${escText(syncMessage)}</div>
+              <div style="margin-top:10px;color:#9fb3cf;font-size:10px;line-height:1.7">${escText(String(summary.recommended_kuma_note || 'No public status note available.'))}</div>
             </div>
-            <div style="margin-top:10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Public Group States</div>
-            <div style="margin-top:6px;color:#dbe8fb;font-size:11px;line-height:1.7">${kumaGroups.length ? kumaGroups.map((item) => `- ${escText(item.label || 'Group')} :: ${escText(String(item.status || 'unknown').replace(/_/g, ' '))}`).join('<br>') : 'No grouped public status available.'}</div>
-          </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:14px;align-items:start">
-          <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
-            <div style="font-size:11px;font-weight:700;color:#fff">Cross-Source Coordination</div>
-            <div style="margin-top:8px;color:#dbe8fb;font-size:11px;line-height:1.7">${actions.length ? actions.map((item) => `- ${escText(item)}`).join('<br>') : 'No immediate operator action suggested.'}</div>
-            <div style="margin-top:10px;color:#dbe8fb;font-size:11px;line-height:1.7">${Array.isArray(summary.abnormalities) && summary.abnormalities.length ? summary.abnormalities.map((item) => `- ${escText(item)}`).join('<br>') : ''}</div>
-          </div>
-          <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
-            <div style="font-size:11px;font-weight:700;color:#fff">Kuma Sync</div>
-            <div style="margin-top:8px;font-size:12px;font-weight:700;color:${syncTone}">${escText(kumaSync.ok ? 'SYNCED' : String(kumaSync.status || 'unknown').toUpperCase())}</div>
-            <div style="margin-top:8px;color:#dbe8fb;font-size:11px;line-height:1.7">${escText(syncMessage)}</div>
+            <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);padding:12px 14px">
+              <div style="font-size:11px;font-weight:700;color:#fff">Source Health</div>
+              <div style="margin-top:8px;display:grid;grid-template-columns:1fr auto;gap:8px;color:#dbe8fb;font-size:11px">
+                <div style="color:var(--muted)">Zabbix</div><div style="color:${sourceStatusColor((zabbix.problem_count || 0) ? 'warning' : zabbix.status || 'ok')}">${escText(String(zabbix.problem_count || 0))} problems</div>
+                <div style="color:var(--muted)">Grafana</div><div style="color:${sourceStatusColor(grafana.status)}">${escText(grafana.status || 'unknown')}</div>
+                <div style="color:var(--muted)">Kuma Public</div><div style="color:${sourceStatusColor(summary.kuma_alignment)}">${escText(kumaPublicStateLabel(kuma))}</div>
+                <div style="color:var(--muted)">Dashboards</div><div>${escText(String(dashboards.length || grafana.dashboard_count || 0))}</div>
+              </div>
+              <div style="margin-top:10px;color:#dbe8fb;font-size:11px;line-height:1.7">${sourceNotes.map((item) => `- ${escText(item)}`).join('<br>')}</div>
+              <div style="margin-top:10px;color:#9fb3cf;font-size:10px;line-height:1.7">${actions.length ? actions.map((item) => `- ${escText(item)}`).join('<br>') : 'No immediate operator actions generated.'}</div>
+            </div>
           </div>
         </div>
 
