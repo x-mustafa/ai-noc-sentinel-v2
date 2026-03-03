@@ -8,7 +8,11 @@ import logging
 import time
 from typing import Any
 
-from app.database import fetch_all, execute
+from app.config import settings
+from app.database import fetch_all, fetch_one, execute
+from app.services.ai_provider import provider_candidates, resolve_runtime_ai
+from app.services.ai_stream import extract_error_chunk, extract_text_chunk
+from app.services.observability import collect_monitoring_snapshot, snapshot_prompt_context
 from app.services.zabbix_client import call_zabbix
 from app.services.ai_stream import stream_ai
 
@@ -16,6 +20,27 @@ logger = logging.getLogger(__name__)
 
 _scheduler = None
 _last_alarm_ids: set[str] = set()
+
+_RISK_ORDER = {
+    "observe": 0,
+    "safe_auto": 1,
+    "approval_required": 2,
+    "forbidden": 3,
+}
+
+_ACTION_MIN_RISK = {
+    "log": "observe",
+    "webhook": "safe_auto",
+    "email": "safe_auto",
+    "teams": "safe_auto",
+    "teams_chat": "safe_auto",
+    "teams_channel": "safe_auto",
+    "whatsapp_group": "safe_auto",
+    "whatsapp_dm": "safe_auto",
+    "incident": "safe_auto",
+    "escalation": "safe_auto",
+    "zabbix_ack": "approval_required",
+}
 
 
 def get_scheduler():
@@ -29,13 +54,85 @@ def get_scheduler():
     return _scheduler
 
 
+def _normalize_risk_tier(value: str | None) -> str:
+    if value in _RISK_ORDER:
+        return value
+    return "safe_auto"
+
+
+def _higher_risk(first: str, second: str) -> str:
+    if _RISK_ORDER[first] >= _RISK_ORDER[second]:
+        return first
+    return second
+
+
+def _parse_action_types(wf: dict) -> list[str]:
+    raw_type = wf.get("action_type") or "log"
+    try:
+        action_types = json.loads(raw_type)
+        if isinstance(action_types, str):
+            action_types = [action_types]
+    except Exception:
+        action_types = [raw_type]
+    return [str(item).strip() for item in action_types if str(item).strip()]
+
+
+def _parse_action_config(wf: dict) -> dict:
+    try:
+        parsed = json.loads(wf.get("action_config") or "{}")
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+    return {}
+
+
+def _required_risk_for_actions(action_types: list[str]) -> str:
+    required = "observe"
+    for action_type in action_types:
+        required = _higher_risk(required, _ACTION_MIN_RISK.get(action_type, "forbidden"))
+    return required
+
+
+def _effective_risk_tier(wf: dict, action_types: list[str]) -> str:
+    configured = _normalize_risk_tier(wf.get("risk_tier"))
+    if configured == "forbidden":
+        return "forbidden"
+    return _higher_risk(configured, _required_risk_for_actions(action_types))
+
+
+def _describe_action_plan(action_types: list[str], raw_cfg: dict, wf: dict) -> str:
+    plan = []
+    for action_type in action_types:
+        per_cfg = raw_cfg.get(action_type)
+        cfg = per_cfg if isinstance(per_cfg, dict) else raw_cfg
+        target = ""
+        for key in ("url", "to", "webhook_url", "chat_id", "team_id", "channel_id", "group_jid", "to_jid", "owner_id", "escalated_to"):
+            if cfg.get(key):
+                target = str(cfg[key])
+                break
+        if not target and action_type == "incident":
+            target = wf.get("employee_id") or "aria"
+        plan.append(f"{action_type} -> {target}" if target else action_type)
+    return "; ".join(plan) or "log"
+
+
+def _response_signals_normal(ai_response: str) -> bool:
+    text = (ai_response or "").strip().upper()
+    return text.startswith("STATUS: NORMAL") or "NO_ABNORMALITIES" in text
+
+
 async def start_engine():
     """Called on app startup. Load scheduled workflows and start the scheduler."""
     sched = get_scheduler()
     if not sched:
-        return
+        return False
+    if sched.running:
+        logger.info("Workflow engine already running.")
+        return True
 
     await _register_scheduled_workflows()
+    sched.add_job(_refresh_scheduled_workflows_job, "interval", minutes=1, id="schedule_refresh", replace_existing=True)
     sched.add_job(_poll_alarm_workflows, "interval", seconds=30,  id="alarm_poll",       replace_existing=True)
     sched.add_job(_watchlist_scan_job,   "interval", hours=4,     id="watchlist_scan",   replace_existing=True)
     sched.add_job(_escalation_followup,  "interval", minutes=5,   id="esc_followup",     replace_existing=True)
@@ -43,6 +140,14 @@ async def start_engine():
     sched.add_job(_self_improvement_job, "cron",     day_of_week="mon", hour=6,           id="self_improve",    replace_existing=True)
     sched.start()
     logger.info("Workflow engine started (alarm poll, watchlist scan, escalation follow-up, change calendar, self-improvement).")
+    return True
+
+
+async def _refresh_scheduled_workflows_job():
+    try:
+        await reload_scheduled_workflows()
+    except Exception as e:
+        logger.warning(f"Workflow schedule refresh failed: {e}")
 
 
 async def _watchlist_scan_job():
@@ -141,14 +246,21 @@ async def _run_self_improvement_all():
             )
 
             sys_prompt = await build_employee_system_prompt(emp_id)
+            provider, model, api_key = resolve_runtime_ai(
+                cfg,
+                (cfg or {}).get("default_ai_provider"),
+                (cfg or {}).get("default_ai_model"),
+            )
+            if not api_key:
+                continue
             chunks = []
             async for chunk in stream_ai(
-                cfg.get("provider", "claude"), cfg.get("claude_key", ""),
-                cfg.get("model", "claude-haiku-4-5-20251001"),
+                provider, api_key, model,
                 sys_prompt, prompt,
             ):
-                if chunk.get("type") == "text":
-                    chunks.append(chunk["text"])
+                text = extract_text_chunk(chunk)
+                if text:
+                    chunks.append(text)
             report = "".join(chunks).strip()
 
             # Store as a high-weight memory entry
@@ -175,9 +287,11 @@ async def _run_self_improvement_all():
 
 
 async def stop_engine():
-    sched = get_scheduler()
+    global _scheduler
+    sched = _scheduler
     if sched and sched.running:
         sched.shutdown(wait=False)
+    _scheduler = None
 
 
 async def _register_scheduled_workflows():
@@ -289,9 +403,11 @@ async def _run_workflow_for_alarm(employee_id: str, alarm: dict):
             return
 
         emp_row = await _fetch("SELECT ai_provider, ai_model FROM employee_profiles WHERE id=%s", (employee_id,))
-        provider = (emp_row or {}).get("ai_provider") or cfg.get("default_ai_provider") or "claude"
-        model    = (emp_row or {}).get("ai_model")    or cfg.get("default_ai_model")    or "claude-haiku-4-5-20251001"
-        api_key  = cfg.get(f"{provider}_key") or cfg.get("claude_key", "")
+        provider, model, api_key = resolve_runtime_ai(
+            cfg,
+            (emp_row or {}).get("ai_provider") or cfg.get("default_ai_provider"),
+            (emp_row or {}).get("ai_model") or cfg.get("default_ai_model"),
+        )
         if not api_key:
             return
 
@@ -307,8 +423,9 @@ async def _run_workflow_for_alarm(employee_id: str, alarm: dict):
 
         chunks = []
         async for chunk in stream_ai(provider, api_key, model, sys_prompt, prompt):
-            if chunk.get("type") == "text":
-                chunks.append(chunk["text"])
+            text = extract_text_chunk(chunk)
+            if text:
+                chunks.append(text)
 
         response = "".join(chunks).strip()
         if response:
@@ -323,12 +440,158 @@ async def _run_workflow_for_alarm(employee_id: str, alarm: dict):
         logger.warning(f"_run_workflow_for_alarm failed: {e}")
 
 
-async def _run_workflow(workflow_id: int, trigger_data: dict):
+async def _queue_workflow_approval(
+    wf: dict,
+    run_id: int,
+    trigger_data: dict,
+    ai_response: str,
+    effective_risk_tier: str,
+    requested_by: str,
+) -> int:
+    action_types = _parse_action_types(wf)
+    raw_cfg = _parse_action_config(wf)
+    action_plan = _describe_action_plan(action_types, raw_cfg, wf)
+    existing_pending = await fetch_one(
+        "SELECT id FROM workflow_approvals WHERE workflow_id=%s AND status='pending' AND action_plan=%s "
+        "AND requested_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE) "
+        "ORDER BY requested_at DESC LIMIT 1",
+        (wf["id"], action_plan),
+    )
+    if existing_pending:
+        approval_id = int(existing_pending["id"])
+        await execute(
+            "UPDATE workflow_runs SET status='awaiting_approval', approval_id=%s, effective_risk_tier=%s, "
+            "ai_response=%s, action_result=%s WHERE id=%s",
+            (
+                approval_id,
+                effective_risk_tier,
+                ai_response[:4000] if ai_response else "",
+                f"Approval already pending: {approval_id} ({action_plan})",
+                run_id,
+            ),
+        )
+        return approval_id
+    approval_id = await execute(
+        "INSERT INTO workflow_approvals "
+        "(workflow_id, workflow_run_id, effective_risk_tier, requested_by, trigger_data, ai_response, action_plan, status) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,'pending')",
+        (
+            wf["id"],
+            run_id,
+            effective_risk_tier,
+            requested_by or "system",
+            json.dumps(trigger_data, default=str),
+            ai_response[:8000] if ai_response else "",
+            action_plan,
+        ),
+    )
+    await execute(
+        "UPDATE workflow_runs SET status='awaiting_approval', approval_id=%s, effective_risk_tier=%s, "
+        "ai_response=%s, action_result=%s WHERE id=%s",
+        (
+            approval_id,
+            effective_risk_tier,
+            ai_response[:4000] if ai_response else "",
+            f"Approval required before executing actions: {action_plan}",
+            run_id,
+        ),
+    )
+    return approval_id
+
+
+async def approve_pending_workflow_action(approval_id: int, decided_by: str, decision_note: str | None = None) -> dict:
+    approval = await fetch_one("SELECT * FROM workflow_approvals WHERE id=%s", (approval_id,))
+    if not approval:
+        raise ValueError("Approval request not found")
+    if approval.get("status") != "pending":
+        raise ValueError("Approval request is no longer pending")
+    requested_by = str(approval.get("requested_by") or "").strip().lower()
+    decided_by_normalized = str(decided_by or "").strip().lower()
+    if requested_by and requested_by not in {"system", "scheduler"} and requested_by == decided_by_normalized:
+        raise ValueError("A different operator must approve this workflow action")
+
+    wf = await fetch_one("SELECT * FROM workflows WHERE id=%s", (approval["workflow_id"],))
+    if not wf:
+        raise ValueError("Workflow no longer exists")
+    if _effective_risk_tier(wf, _parse_action_types(wf)) == "forbidden":
+        raise ValueError("Workflow is now marked forbidden and cannot be executed")
+
+    trigger_data = {}
+    try:
+        trigger_data = json.loads(approval.get("trigger_data") or "{}")
+    except Exception:
+        pass
+
+    ai_response = approval.get("ai_response") or ""
+    await execute(
+        "UPDATE workflow_approvals SET status='approved', decided_by=%s, decision_note=%s, decided_at=NOW() WHERE id=%s",
+        (decided_by, decision_note, approval_id),
+    )
+
+    action_result = await _execute_action(wf, trigger_data, ai_response)
+    run_status = "error" if "error:" in action_result.lower() else "success"
+    await execute(
+        "UPDATE workflow_runs SET status=%s, effective_risk_tier=%s, ai_response=%s, action_result=%s WHERE id=%s",
+        (
+            run_status,
+            approval.get("effective_risk_tier") or "approval_required",
+            ai_response[:4000] if ai_response else "",
+            action_result,
+            approval["workflow_run_id"],
+        ),
+    )
+    await execute(
+        "UPDATE workflow_approvals SET status='executed', executed_at=NOW() WHERE id=%s",
+        (approval_id,),
+    )
+    return {
+        "ok": True,
+        "approval_id": approval_id,
+        "workflow_id": approval["workflow_id"],
+        "run_id": approval["workflow_run_id"],
+        "status": "executed",
+        "run_status": run_status,
+        "action_result": action_result,
+    }
+
+
+async def reject_pending_workflow_action(approval_id: int, decided_by: str, decision_note: str | None = None) -> dict:
+    approval = await fetch_one("SELECT * FROM workflow_approvals WHERE id=%s", (approval_id,))
+    if not approval:
+        raise ValueError("Approval request not found")
+    if approval.get("status") != "pending":
+        raise ValueError("Approval request is no longer pending")
+
+    note = decision_note or "Rejected by operator"
+    await execute(
+        "UPDATE workflow_approvals SET status='rejected', decided_by=%s, decision_note=%s, decided_at=NOW() WHERE id=%s",
+        (decided_by, note, approval_id),
+    )
+    await execute(
+        "UPDATE workflow_runs SET status='blocked', effective_risk_tier=%s, action_result=%s WHERE id=%s",
+        (
+            approval.get("effective_risk_tier") or "approval_required",
+            f"Rejected by {decided_by}: {note}",
+            approval["workflow_run_id"],
+        ),
+    )
+    return {
+        "ok": True,
+        "approval_id": approval_id,
+        "workflow_id": approval["workflow_id"],
+        "run_id": approval["workflow_run_id"],
+        "status": "rejected",
+    }
+
+
+async def _run_workflow(workflow_id: int, trigger_data: dict, requested_by: str = "system"):
     """Execute a single workflow: get AI analysis → execute action → log run."""
     wf = await fetch_all("SELECT * FROM workflows WHERE id=%s LIMIT 1", (workflow_id,))
     if not wf:
-        return
+        return {"ok": False, "workflow_id": workflow_id, "error": "Workflow not found"}
     wf = wf[0]
+    action_types = _parse_action_types(wf)
+    effective_risk_tier = _effective_risk_tier(wf, action_types)
 
     run_id = await execute(
         "INSERT INTO workflow_runs (workflow_id, trigger_data, status) VALUES (%s,%s,'running')",
@@ -347,11 +610,46 @@ async def _run_workflow(workflow_id: int, trigger_data: dict):
     ai_response = ""
     try:
         ai_response = await _get_ai_response(wf, trigger_data)
-        action_result = await _execute_action(wf, trigger_data, ai_response)
-        await execute(
-            "UPDATE workflow_runs SET ai_response=%s, action_result=%s, status='success' WHERE id=%s",
-            (ai_response[:4000] if ai_response else "", action_result, run_id),
-        )
+        approval_id = None
+        result_status = "success"
+
+        if effective_risk_tier == "forbidden":
+            action_result = "blocked: forbidden risk tier; no action executed"
+            result_status = "blocked"
+            await execute(
+                "UPDATE workflow_runs SET ai_response=%s, action_result=%s, status=%s, effective_risk_tier=%s WHERE id=%s",
+                (
+                    ai_response[:4000] if ai_response else "",
+                    action_result,
+                    result_status,
+                    effective_risk_tier,
+                    run_id,
+                ),
+            )
+        elif effective_risk_tier == "approval_required":
+            approval_id = await _queue_workflow_approval(
+                wf,
+                run_id,
+                trigger_data,
+                ai_response,
+                effective_risk_tier,
+                requested_by or "system",
+            )
+            action_result = f"approval queued: {approval_id}"
+            result_status = "awaiting_approval"
+        else:
+            action_result = await _execute_action(wf, trigger_data, ai_response)
+            result_status = "error" if "error:" in action_result.lower() else "success"
+            await execute(
+                "UPDATE workflow_runs SET ai_response=%s, action_result=%s, status=%s, effective_risk_tier=%s WHERE id=%s",
+                (
+                    ai_response[:4000] if ai_response else "",
+                    action_result,
+                    result_status,
+                    effective_risk_tier,
+                    run_id,
+                ),
+            )
 
         # Auto-save what was found as employee memory (no extra AI call)
         if ai_response.strip():
@@ -363,13 +661,30 @@ async def _run_workflow(workflow_id: int, trigger_data: dict):
         asyncio.create_task(
             _check_and_announce_anomaly(emp_id, wf, trigger_data, ai_response)
         )
+        return {
+            "ok": True,
+            "workflow_id": workflow_id,
+            "run_id": run_id,
+            "status": result_status,
+            "effective_risk_tier": effective_risk_tier,
+            "approval_id": approval_id,
+            "action_result": action_result,
+        }
 
     except Exception as e:
         logger.error(f"Workflow {workflow_id} run failed: {e}")
         await execute(
-            "UPDATE workflow_runs SET status='error', action_result=%s WHERE id=%s",
-            (str(e)[:500], run_id),
+            "UPDATE workflow_runs SET status='error', effective_risk_tier=%s, action_result=%s WHERE id=%s",
+            (effective_risk_tier, str(e)[:500], run_id),
         )
+        return {
+            "ok": False,
+            "workflow_id": workflow_id,
+            "run_id": run_id,
+            "status": "error",
+            "effective_risk_tier": effective_risk_tier,
+            "error": str(e)[:500],
+        }
     finally:
         # Always restore employee to available after workflow completes
         try:
@@ -398,19 +713,15 @@ async def _get_ai_response(wf: dict, trigger_data: dict) -> str:
                   .replace("{severity}", str(p.get("severity", 0))))
 
     cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-    provider = cfg.get("default_ai_provider") or "claude"
-    model    = cfg.get("default_ai_model")    or ""
-    key_map  = {"claude": "claude_key", "openai": "openai_key",
-                "gemini": "gemini_key", "grok": "grok_key", "openrouter": "openrouter_key"}
-    api_key  = cfg.get(key_map.get(provider, "claude_key"), "")
+    candidates = provider_candidates(
+        cfg,
+        cfg.get("default_ai_provider"),
+        cfg.get("default_ai_model"),
+        fallback_provider=cfg.get("default_ai_provider") or "claude",
+    )
 
-    if not api_key:
+    if not candidates:
         return "[No AI key configured]"
-
-    model_defaults = {"claude": "claude-haiku-4-5-20251001", "openai": "gpt-4o-mini",
-                      "gemini": "gemini-2.0-flash", "grok": "grok-2-latest",
-                      "openrouter": "anthropic/claude-haiku-4-5"}
-    model = model or model_defaults.get(provider, "claude-haiku-4-5-20251001")
 
     # Load the assigned employee's full persona, fall back to generic
     emp_id = wf.get("employee_id") or "aria"
@@ -418,6 +729,14 @@ async def _get_ai_response(wf: dict, trigger_data: dict) -> str:
 
     # Load operational context: open incidents + shift + device knowledge for this host
     ops_ctx = await get_full_operational_context(emp_id, host=host_name)
+    observability_ctx = ""
+    snapshot = None
+    if wf.get("trigger_type") in ("manual", "schedule"):
+        try:
+            snapshot = await collect_monitoring_snapshot(cfg)
+            observability_ctx = "\n\n" + snapshot_prompt_context(snapshot)
+        except Exception as e:
+            logger.debug(f"Observability snapshot failed (non-fatal): {e}")
 
     # F6 — Inject matching approved runbooks into the prompt
     runbook_ctx = ""
@@ -437,22 +756,94 @@ async def _get_ai_response(wf: dict, trigger_data: dict) -> str:
     system = (
         (persona or "You are NOC Sentinel AI for Tabadul payment infrastructure.")
         + ops_ctx
+        + observability_ctx
         + runbook_ctx
         + "\n\nWORKFLOW MODE: You are responding to an automated trigger. "
         "Be concise and actionable. Lead with the most critical finding. "
         "No preamble, no closing remarks."
     )
 
-    full_response = ""
-    async for chunk in stream_ai(provider, api_key, model, system, prompt):
-        if "data" in chunk:
-            try:
-                d = json.loads(chunk["data"])
-                full_response += d.get("t", "")
-            except Exception:
-                pass
+    attempt_errors: list[str] = []
+    for provider, model, api_key in candidates:
+        full_response = ""
+        first_error = ""
+        async for chunk in stream_ai(provider, api_key, model, system, prompt):
+            text = extract_text_chunk(chunk)
+            if text:
+                full_response += text
+                continue
+            if not first_error:
+                first_error = extract_error_chunk(chunk)
 
-    return full_response
+        if full_response.strip():
+            return full_response
+
+        if first_error:
+            attempt_errors.append(f"{provider}: {first_error}")
+            logger.warning("Workflow AI provider %s failed, trying fallback.", provider)
+        else:
+            attempt_errors.append(f"{provider}: returned no text")
+
+    if wf.get("trigger_type") in ("schedule", "alarm"):
+        fallback_response = _rules_based_workflow_fallback(trigger_data, snapshot, attempt_errors)
+        if fallback_response:
+            logger.warning("Workflow %s used rules-based fallback because no AI provider succeeded.", wf.get("id"))
+            return fallback_response
+
+    raise RuntimeError("All AI providers failed: " + " | ".join(attempt_errors)[:600])
+
+
+def _rules_based_workflow_fallback(trigger_data: dict, snapshot: dict | None, attempt_errors: list[str]) -> str:
+    failure_note = "AI providers unavailable; using a deterministic monitoring fallback."
+
+    problem = trigger_data.get("problem") if isinstance(trigger_data, dict) else None
+    if isinstance(problem, dict) and problem:
+        alarm_name = str(problem.get("name") or "Unknown alarm")
+        severity = str(problem.get("severity") or "?")
+        event_id = str(problem.get("eventid") or "?")
+        return (
+            "STATUS: ABNORMAL\n"
+            f"FINDINGS: Alarm '{alarm_name}' (severity {severity}, event {event_id}) triggered while {failure_note.lower()}\n"
+            "IMPACT: Active alarm conditions require operator validation and containment.\n"
+            "NEXT ACTION: Review the alarm in Zabbix, confirm customer impact, and follow the matching runbook.\n"
+            "ESCALATION: Duty Manager if the issue is user-facing, widespread, or sustained."
+        )
+
+    zabbix = (snapshot or {}).get("zabbix") or {}
+    problem_count = int(zabbix.get("problem_count") or 0)
+    zabbix_status = str(zabbix.get("status") or "unknown")
+    top_problems = zabbix.get("top_problems") or []
+
+    if zabbix_status == "error":
+        provider_note = ""
+        if attempt_errors:
+            provider_note = " Provider failures: " + "; ".join(attempt_errors[:2])[:260]
+        return (
+            "STATUS: ABNORMAL\n"
+            f"FINDINGS: Zabbix monitoring could not be read. {failure_note}{provider_note}\n"
+            "IMPACT: Current network health cannot be confirmed from automation.\n"
+            "NEXT ACTION: Check Zabbix connectivity, API auth, and core monitoring reachability immediately.\n"
+            "ESCALATION: NOC platform owner if monitoring remains unavailable."
+        )
+
+    if problem_count > 0:
+        highlights = ", ".join(
+            f"{item.get('name', 'Unknown issue')} (sev {int(item.get('severity') or 0)})"
+            for item in top_problems[:3]
+        ) or "Multiple active Zabbix problems"
+        return (
+            "STATUS: ABNORMAL\n"
+            f"FINDINGS: Zabbix reports {problem_count} active problem(s). Top signals: {highlights}. {failure_note}\n"
+            "IMPACT: One or more monitored services are degraded or at risk until triaged.\n"
+            "NEXT ACTION: Validate the top active alarms in Zabbix, confirm whether the same issue is already owned, and update the incident timeline.\n"
+            "ESCALATION: Duty Manager if severity is high/disaster, multiple systems are affected, or customer impact is confirmed."
+        )
+
+    return (
+        "STATUS: NORMAL\n"
+        "Zabbix currently reports no active problems. "
+        f"{failure_note}"
+    )
 
 
 async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str:
@@ -464,27 +855,21 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
     action_config is a nested dict keyed by action type for multi-action workflows,
     or a flat dict for legacy single-action workflows.
     """
-    raw_type = wf.get("action_type") or "log"
-    try:
-        action_types = json.loads(raw_type)
-        if isinstance(action_types, str):
-            action_types = [action_types]
-    except Exception:
-        action_types = [raw_type]
-
-    raw_cfg: dict = {}
-    try:
-        raw_cfg = json.loads(wf.get("action_config") or "{}")
-    except Exception:
-        pass
+    action_types = _parse_action_types(wf)
+    raw_cfg = _parse_action_config(wf)
+    normal_signal = _response_signals_normal(ai_response)
 
     results = []
+    runtime_ctx: dict[str, Any] = {}
     for action_type in action_types:
         # Per-action config: use sub-dict if present, else fall back to root (legacy)
         per_cfg = raw_cfg.get(action_type)
         cfg = per_cfg if isinstance(per_cfg, dict) else raw_cfg
+        if normal_signal and action_type != "log":
+            results.append(f"{action_type}: skipped (STATUS: NORMAL)")
+            continue
         try:
-            result = await _run_single_action(action_type, cfg, wf, trigger_data, ai_response)
+            result = await _run_single_action(action_type, cfg, wf, trigger_data, ai_response, runtime_ctx)
         except Exception as e:
             result = f"error: {e}"
         results.append(f"{action_type}: {result}")
@@ -493,7 +878,7 @@ async def _execute_action(wf: dict, trigger_data: dict, ai_response: str) -> str
 
 
 async def _run_single_action(
-    action_type: str, cfg: dict, wf: dict, trigger_data: dict, ai_response: str
+    action_type: str, cfg: dict, wf: dict, trigger_data: dict, ai_response: str, runtime_ctx: dict[str, Any]
 ) -> str:
     """Execute a single action type and return a short status string."""
 
@@ -512,7 +897,7 @@ async def _run_single_action(
             "ai_response": ai_response,
         }
         try:
-            async with httpx.AsyncClient(verify=False, timeout=10) as client:
+            async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=10) as client:
                 resp = await client.post(url, json=body,
                                           headers=cfg.get("headers", {}))
             return f"HTTP {resp.status_code}"
@@ -622,27 +1007,117 @@ async def _run_single_action(
         hosts     = prob.get("hosts") or []
         host      = hosts[0] if hosts else None
         zabbix_id = str(prob.get("eventid") or "") or None
+        existing_incident = None
+        if zabbix_id:
+            existing_incident = await fetch_one(
+                "SELECT id FROM incidents WHERE zabbix_event_id=%s AND status NOT IN ('resolved','closed') "
+                "ORDER BY id DESC LIMIT 1",
+                (zabbix_id,),
+            )
+        elif wf.get("trigger_type") == "schedule":
+            existing_incident = await fetch_one(
+                "SELECT id FROM incidents WHERE title=%s AND owner_id=%s AND created_by='workflow' "
+                "AND status NOT IN ('resolved','closed') "
+                "AND started_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE) "
+                "ORDER BY id DESC LIMIT 1",
+                (title, owner_id),
+            )
+        if existing_incident:
+            await execute(
+                "UPDATE incidents SET description=%s WHERE id=%s",
+                (ai_response[:2000], existing_incident["id"]),
+            )
+            runtime_ctx["incident_id"] = existing_incident["id"]
+            runtime_ctx["incident_title"] = title
+            return f"existing INC-{int(existing_incident['id']):04d}"
         inc_id = await execute(
             "INSERT INTO incidents "
             "(title, description, owner_id, severity, host, zabbix_event_id, created_by) "
             "VALUES (%s,%s,%s,%s,%s,%s,'workflow')",
             (title, ai_response[:2000], owner_id, severity, host, zabbix_id),
         )
+        runtime_ctx["incident_id"] = inc_id
+        runtime_ctx["incident_title"] = title
         return f"created INC-{inc_id:04d}"
+
+    elif action_type == "escalation":
+        from datetime import datetime, timedelta
+
+        escalated_to = str(cfg.get("escalated_to") or "Duty Manager").strip()[:200]
+        if not escalated_to:
+            return "error: no escalation target"
+        channel = str(cfg.get("channel") or "teams").strip()[:50] or "teams"
+        followup_minutes = max(5, min(240, int(cfg.get("followup_minutes") or 30)))
+        max_followups = max(1, min(10, int(cfg.get("max_followups") or 3)))
+        message_template = str(cfg.get("message") or "").strip()
+        if message_template:
+            message_sent = (
+                message_template
+                .replace("{workflow_name}", wf.get("name") or "Workflow")
+                .replace("{ai_response}", ai_response[:500])
+            )
+        else:
+            message_sent = ai_response[:2000]
+        incident_id = runtime_ctx.get("incident_id") or cfg.get("incident_id") or trigger_data.get("incident_id")
+        if incident_id == "":
+            incident_id = None
+        employee_id = cfg.get("employee_id") or wf.get("employee_id") or "aria"
+        existing_escalation = None
+        if incident_id:
+            existing_escalation = await fetch_one(
+                "SELECT id FROM escalations WHERE incident_id=%s AND employee_id=%s AND escalated_to=%s "
+                "AND channel=%s AND status='open' ORDER BY id DESC LIMIT 1",
+                (incident_id, employee_id, escalated_to, channel),
+            )
+        else:
+            existing_escalation = await fetch_one(
+                "SELECT id FROM escalations WHERE incident_id IS NULL AND employee_id=%s AND escalated_to=%s "
+                "AND channel=%s AND status='open' "
+                "AND created_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE) "
+                "ORDER BY id DESC LIMIT 1",
+                (employee_id, escalated_to, channel),
+            )
+        if existing_escalation:
+            await execute(
+                "UPDATE escalations SET message_sent=%s WHERE id=%s",
+                (message_sent, existing_escalation["id"]),
+            )
+            runtime_ctx["escalation_id"] = existing_escalation["id"]
+            return f"existing ESC-{int(existing_escalation['id']):04d}"
+        esc_id = await execute(
+            "INSERT INTO escalations "
+            "(incident_id, employee_id, escalated_to, channel, message_sent, followup_at, max_followups) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (
+                incident_id,
+                employee_id,
+                escalated_to,
+                channel,
+                message_sent,
+                datetime.utcnow() + timedelta(minutes=followup_minutes),
+                max_followups,
+            ),
+        )
+        runtime_ctx["escalation_id"] = esc_id
+        return f"created ESC-{esc_id:04d}"
 
     return f"unknown action type"
 
 
-async def trigger_workflow_manually(workflow_id: int) -> dict:
+async def trigger_workflow_manually(workflow_id: int, requested_by: str = "system") -> dict:
     """Manually trigger a workflow. Returns run status."""
-    await _run_workflow(workflow_id, {"trigger": "manual", "ts": int(time.time())})
-    return {"ok": True, "workflow_id": workflow_id}
+    return await _run_workflow(
+        workflow_id,
+        {"trigger": "manual", "ts": int(time.time())},
+        requested_by=requested_by or "system",
+    )
 
 
 async def reload_scheduled_workflows():
     """Re-register all scheduled workflows (call after create/update/delete)."""
-    sched = get_scheduler()
-    if not sched:
+    global _scheduler
+    sched = _scheduler
+    if not sched or not sched.running:
         return
     # Remove existing workflow jobs
     for job in sched.get_jobs():

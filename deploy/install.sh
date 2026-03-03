@@ -120,15 +120,20 @@ info "Nginx configured for domain: $DOMAIN"
 # =============================================================================
 info "Installing systemd service..."
 cp "$APP_DIR/deploy/noc-sentinel.service" /etc/systemd/system/noc-sentinel.service
+cp "$APP_DIR/deploy/noc-sentinel-worker.service" /etc/systemd/system/noc-sentinel-worker.service
 
 # Point WorkingDirectory to our install path
 sed -i "s|/opt/noc-sentinel|$APP_DIR|g" /etc/systemd/system/noc-sentinel.service
+sed -i "s|/opt/noc-sentinel|$APP_DIR|g" /etc/systemd/system/noc-sentinel-worker.service
 sed -i "s|User=nocsentinel|User=$APP_USER|g"    /etc/systemd/system/noc-sentinel.service
 sed -i "s|Group=nocsentinel|Group=$APP_USER|g"  /etc/systemd/system/noc-sentinel.service
+sed -i "s|User=nocsentinel|User=$APP_USER|g"    /etc/systemd/system/noc-sentinel-worker.service
+sed -i "s|Group=nocsentinel|Group=$APP_USER|g"  /etc/systemd/system/noc-sentinel-worker.service
 
 systemctl daemon-reload
 systemctl enable noc-sentinel
-info "Systemd service installed. Start it after .env is configured."
+systemctl enable noc-sentinel-worker
+info "Systemd services installed. Start them after .env is configured."
 
 # =============================================================================
 # 9. PM2 for WhatsApp bridge
@@ -193,14 +198,22 @@ echo ""
 echo "  4. Generate a license for this machine (if license enforcement is on):"
 echo "       cd $APP_DIR && python tools/generate_license.py"
 echo ""
-echo "  5. Start the FastAPI service:"
-echo "       systemctl start noc-sentinel"
-echo "       systemctl status noc-sentinel"
+echo "  5. Apply database migrations:"
+echo "       cd $APP_DIR && $APP_DIR/venv/bin/python tools/migrate.py"
 echo ""
-echo "  6. Verify health:"
+echo "  6. Create your first local admin (or configure LDAP first):"
+echo "       cd $APP_DIR && $APP_DIR/venv/bin/python tools/create_admin.py --username admin --password CHANGE_ME_NOW"
+echo ""
+echo "  7. Start the FastAPI and worker services:"
+echo "       systemctl start noc-sentinel"
+echo "       systemctl start noc-sentinel-worker"
+echo "       systemctl status noc-sentinel"
+echo "       systemctl status noc-sentinel-worker"
+echo ""
+echo "  8. Verify health:"
 echo "       curl https://$DOMAIN/api/health"
 echo ""
-echo "  7. Scan WhatsApp QR code (if using WA integration):"
+echo "  9. Scan WhatsApp QR code (if using WA integration):"
 echo "       pm2 logs noc-whatsapp"
 echo ""
 echo -e "${GREEN}Done. Good luck!${NC}"

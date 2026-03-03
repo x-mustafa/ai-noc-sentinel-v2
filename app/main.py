@@ -8,8 +8,9 @@ import logging
 import os
 
 from app.config import settings
-from app.database import close_pool, run_migration
-from app.routers import auth, zabbix, nodes, users, discover, import_router, chat, office, workflows, vault, ms365, incidents, messages, runbooks, sla, watchlist, escalations, changes, nocboard, alert_rules, reports
+from app.database import close_pool, get_pending_migrations, run_migration
+from app.routers import auth, zabbix, nodes, users, discover, import_router, chat, office, workflows, vault, ms365, incidents, messages, runbooks, sla, watchlist, escalations, changes, nocboard, alert_rules, reports, observability
+from app.services.rate_limit import close_rate_limiter
 from app.services.workflow_engine import start_engine, stop_engine
 
 logging.basicConfig(level=logging.INFO)
@@ -19,15 +20,39 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting NOC Sentinel Python backend...")
+    embedded_engine_started = False
     # License check — runs before anything else
     from app.license_check import check_license
     check_license()
     logger.info("License verified.")
-    await run_migration()
-    logger.info("DB migrations done.")
-    await start_engine()
+    pending = await get_pending_migrations()
+    if pending:
+        if settings.db_auto_migrate_on_startup:
+            applied = await run_migration()
+            logger.info(f"DB migrations done. Applied: {', '.join(applied)}")
+        else:
+            pending_ids = ", ".join(item["migration_id"] for item in pending)
+            raise SystemExit(
+                "Pending database migrations detected. "
+                f"Run `python tools/migrate.py` before starting the app. Pending: {pending_ids}"
+            )
+    else:
+        logger.info("DB schema up to date.")
+    if settings.embedded_scheduler_enabled:
+        logger.warning(
+            "Embedded workflow scheduler is enabled in the web process. "
+            "Use `python tools/run_worker.py` for production deployments."
+        )
+        embedded_engine_started = await start_engine()
+    else:
+        logger.info(
+            "Embedded workflow scheduler is disabled. "
+            "Start `python tools/run_worker.py` for scheduled automation."
+        )
     yield
-    await stop_engine()
+    if embedded_engine_started:
+        await stop_engine()
+    await close_rate_limiter()
     await close_pool()
     logger.info("Shutdown complete.")
 
@@ -86,7 +111,7 @@ app.add_middleware(
     secret_key=settings.app_secret,
     max_age=settings.session_max_age,
     same_site="lax",
-    https_only=False,   # set True when HTTPS is terminated by nginx in front
+    https_only=settings.session_https_only,
     session_cookie="noc_session",
 )
 
@@ -113,6 +138,7 @@ app.include_router(changes.router,      prefix="/api/office",     tags=["changes
 app.include_router(nocboard.router,     prefix="/api/office",     tags=["nocboard"])
 app.include_router(alert_rules.router,  prefix="/api",            tags=["alert-rules"])
 app.include_router(reports.router,      prefix="/api",            tags=["reports"])
+app.include_router(observability.router, prefix="/api/observability", tags=["observability"])
 
 # ── Health check ───────────────────────────────────────────────────────────────
 @app.get("/api/health", tags=["health"])
@@ -121,7 +147,25 @@ async def health():
     try:
         from app.database import fetch_one
         await fetch_one("SELECT 1")
-        return {"status": "ok", "db": "connected"}
+        payload = {"status": "ok", "db": "connected"}
+        if settings.embedded_scheduler_enabled:
+            payload["workflow_engine"] = {"mode": "embedded", "status": "running"}
+        else:
+            worker = await fetch_one(
+                "SELECT status, details, TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS age_seconds "
+                "FROM service_heartbeats WHERE service_name=%s",
+                ("workflow_worker",),
+            )
+            if worker:
+                payload["workflow_engine"] = {
+                    "mode": "external",
+                    "status": worker["status"],
+                    "details": worker.get("details") or "",
+                    "age_seconds": worker.get("age_seconds"),
+                }
+            else:
+                payload["workflow_engine"] = {"mode": "external", "status": "missing"}
+        return payload
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return JSONResponse({"status": "error", "db": str(e)}, status_code=503)

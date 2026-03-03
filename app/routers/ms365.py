@@ -33,6 +33,12 @@ from app.database import fetch_all, fetch_one, execute
 router = APIRouter()
 
 
+def _raise_m365_list_error(rows: list[dict] | None) -> list[dict]:
+    if rows and isinstance(rows, list) and isinstance(rows[0], dict) and rows[0].get("error"):
+        raise HTTPException(503, rows[0]["error"])
+    return rows or []
+
+
 # ── Pydantic models ────────────────────────────────────────────────────────────
 
 class SendEmailBody(BaseModel):
@@ -333,13 +339,13 @@ async def api_send_email(
 @router.get("/teams")
 async def api_list_teams(session: dict = Depends(get_session)):
     """List all Teams the app has access to. Requires Team.ReadBasic.All."""
-    return await list_teams()
+    return _raise_m365_list_error(await list_teams())
 
 
 @router.get("/teams/{team_id}/channels")
 async def api_list_channels(team_id: str, session: dict = Depends(get_session)):
     """List channels in a team. Requires Channel.ReadBasic.All."""
-    return await list_team_channels(team_id)
+    return _raise_m365_list_error(await list_team_channels(team_id))
 
 
 @router.get("/teams/{team_id}/channels/{channel_id}/messages")
@@ -348,7 +354,7 @@ async def api_get_channel_messages(
     session: dict = Depends(get_session),
 ):
     """Get recent channel messages. Requires ChannelMessage.Read.All."""
-    return await get_channel_messages(team_id, channel_id, limit)
+    return _raise_m365_list_error(await get_channel_messages(team_id, channel_id, limit))
 
 
 @router.post("/teams/{team_id}/channels/{channel_id}/send")
@@ -370,7 +376,7 @@ async def api_send_to_channel(
 @router.get("/chats")
 async def api_list_chats(limit: int = 50, session: dict = Depends(get_session)):
     """List group chats the shared mailbox is a member of. Requires Chat.ReadWrite.All."""
-    return await list_chats(limit)
+    return _raise_m365_list_error(await list_chats(limit))
 
 
 @router.get("/chats/{chat_id}/messages")
@@ -379,7 +385,7 @@ async def api_get_chat_messages(
     session: dict = Depends(get_session),
 ):
     """Get messages from a Teams chat. Requires Chat.ReadWrite.All."""
-    return await get_chat_messages(chat_id, limit)
+    return _raise_m365_list_error(await get_chat_messages(chat_id, limit))
 
 
 @router.post("/chats/{chat_id}/send")

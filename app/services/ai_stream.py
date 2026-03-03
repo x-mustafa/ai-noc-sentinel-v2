@@ -9,6 +9,8 @@ import httpx
 import logging
 from typing import AsyncGenerator
 
+from app.config import settings
+
 # Cache org UUID per session-key prefix to avoid repeated /api/organizations calls
 _claude_web_org_cache: dict = {}
 
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 SSE_DONE  = {"event": "done",  "data": "{}"}
 TIMEOUT   = httpx.Timeout(120.0, connect=15.0)
-NO_VERIFY = httpx.create_ssl_context() if False else False   # verify=False
+OUTBOUND_TLS_VERIFY = settings.outbound_tls_verify
 
 
 def _sse_text(text: str) -> dict:
@@ -25,6 +27,34 @@ def _sse_text(text: str) -> dict:
 
 def _sse_error(msg: str) -> dict:
     return {"event": "error", "data": json.dumps({"error": msg})}
+
+
+def extract_text_chunk(chunk: dict) -> str:
+    """Return the text payload from an SSE chunk, if present."""
+    if not isinstance(chunk, dict):
+        return ""
+    raw = chunk.get("data")
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return ""
+    return str(data.get("t") or "")
+
+
+def extract_error_chunk(chunk: dict) -> str:
+    """Return the error payload from an SSE chunk, if present."""
+    if not isinstance(chunk, dict) or chunk.get("event") != "error":
+        return ""
+    raw = chunk.get("data")
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return ""
+    return str(data.get("error") or "")
 
 
 async def stream_claude(
@@ -62,7 +92,7 @@ async def stream_claude(
     }
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=TIMEOUT) as client:
+        async with httpx.AsyncClient(verify=OUTBOUND_TLS_VERIFY, timeout=TIMEOUT) as client:
             async with client.stream("POST", "https://api.anthropic.com/v1/messages",
                                      headers=headers, json=payload) as resp:
                 if resp.status_code != 200:
@@ -130,7 +160,7 @@ async def stream_openai(
         headers.update(extra_headers)
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=TIMEOUT) as client:
+        async with httpx.AsyncClient(verify=OUTBOUND_TLS_VERIFY, timeout=TIMEOUT) as client:
             async with client.stream("POST", api_url, headers=headers, json=payload) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
@@ -216,7 +246,7 @@ async def stream_gemini(
     headers = {"Content-Type": "application/json"}
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=TIMEOUT) as client:
+        async with httpx.AsyncClient(verify=OUTBOUND_TLS_VERIFY, timeout=TIMEOUT) as client:
             async with client.stream("POST", url, headers=headers, json=payload) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
@@ -338,7 +368,7 @@ async def stream_claude_web(
         headers["Cookie"] = f"sessionKey={session_key}"
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(verify=OUTBOUND_TLS_VERIFY, timeout=TIMEOUT, follow_redirects=True) as client:
 
             # Step 1: Resolve org UUID (cached)
             org_id = _claude_web_org_cache.get(cache_key)
@@ -495,7 +525,7 @@ async def stream_chatgpt_web(
         payload["system_prompt"] = system
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(verify=OUTBOUND_TLS_VERIFY, timeout=TIMEOUT, follow_redirects=True) as client:
             async with client.stream(
                 "POST",
                 "https://chatgpt.com/backend-api/conversation",

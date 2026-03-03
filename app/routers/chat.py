@@ -6,6 +6,7 @@ from typing import Optional, List, Any
 
 from app.deps import get_session
 from app.database import fetch_one
+from app.services.ai_provider import resolve_runtime_ai
 from app.services.ai_stream import stream_ai
 
 router = APIRouter()
@@ -51,26 +52,9 @@ SEV_LABELS = {0: "Not classified", 1: "Info", 2: "Warning", 3: "Average", 4: "Hi
 async def chat(body: ChatBody, session: dict = Depends(get_session)):
     cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
 
-    provider = cfg.get("default_ai_provider") or "claude"
-    model    = cfg.get("default_ai_model")    or ""
-    key_map  = {"claude": "claude_key", "openai": "openai_key",
-                "gemini": "gemini_key", "grok": "grok_key",
-                "openrouter": "openrouter_key"}
-    api_key  = cfg.get(key_map.get(provider, "claude_key"), "")
-
-    # Fallback to claude_key if default provider key missing
-    if not api_key and provider != "claude":
-        api_key  = cfg.get("claude_key", "")
-        provider = "claude"
-
+    provider, model, api_key = resolve_runtime_ai(cfg)
     if not api_key:
         raise HTTPException(400, "AI API key not configured — go to Settings → AI Providers")
-
-    model_defaults = {"claude": "claude-sonnet-4-6", "openai": "gpt-4o",
-                      "gemini": "gemini-2.0-flash", "grok": "grok-2-latest",
-                      "openrouter": "anthropic/claude-3.5-haiku"}
-    if not model:
-        model = model_defaults.get(provider, "claude-sonnet-4-6")
 
     # Build stats summary
     stats    = body.network_stats

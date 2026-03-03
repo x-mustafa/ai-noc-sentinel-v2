@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
+from app.config import settings
 from app.deps import get_session, require_admin
 from app.database import fetch_all, fetch_one, execute
 from app.services.ldap_auth import test_ldap_connection
@@ -34,8 +35,8 @@ class CreateUserBody(BaseModel):
 async def create_user(body: CreateUserBody, session: dict = Depends(require_admin)):
     if not body.username:
         raise HTTPException(400, "Username required")
-    if len(body.password) < 4:
-        raise HTTPException(400, "Password min 4 chars")
+    if len(body.password) < settings.password_min_length:
+        raise HTTPException(400, f"Password min {settings.password_min_length} chars")
     if body.role not in ("admin", "operator", "viewer"):
         raise HTTPException(400, "Invalid role")
     try:
@@ -73,8 +74,8 @@ async def update_user(user_id: int, body: UpdateUserBody, session: dict = Depend
     if body.email is not None:
         sets.append("email=%s");        vals.append(body.email or None)
     if body.password:
-        if len(body.password) < 4:
-            raise HTTPException(400, "Password min 4 chars")
+        if len(body.password) < settings.password_min_length:
+            raise HTTPException(400, f"Password min {settings.password_min_length} chars")
         sets.append("password_hash=%s"); vals.append(hash_password(body.password))
     if not sets:
         raise HTTPException(400, "Nothing to update")

@@ -6,7 +6,9 @@ On the next task, inject past memories into the system prompt.
 import json
 import logging
 import httpx
+from app.config import settings
 from app.database import fetch_all, execute
+from app.services.ai_stream import extract_text_chunk, stream_ai
 
 logger = logging.getLogger(__name__)
 
@@ -68,20 +70,13 @@ async def save_memory(
 
     result = None
     try:
-        if provider == "claude":
-            result = await _call_claude(api_key, model, extraction_prompt)
-        elif provider in ("openai", "grok"):
-            url = "https://api.openai.com/v1/chat/completions" if provider == "openai" else "https://api.x.ai/v1/chat/completions"
-            result = await _call_openai_compat(api_key, model, url, extraction_prompt)
-        elif provider == "openrouter":
-            result = await _call_openai_compat(
-                api_key, model,
-                "https://openrouter.ai/api/v1/chat/completions",
-                extraction_prompt,
-                extra_headers=_OPENROUTER_HEADERS,
-            )
-        elif provider == "gemini":
-            result = await _call_gemini(api_key, model, extraction_prompt)
+        parts: list[str] = []
+        async for chunk in stream_ai(provider, api_key, model, "", extraction_prompt):
+            text = extract_text_chunk(chunk)
+            if text:
+                parts.append(text)
+        if parts:
+            result = "".join(parts).strip()
     except Exception as e:
         logger.warning(f"Memory extraction failed: {e}")
         return
@@ -235,7 +230,7 @@ async def get_memories(employee_id: str, limit: int = 50) -> list[dict]:
 # ── Mini AI callers for extraction (non-streaming) ────────────────────────────
 
 async def _call_claude(key: str, model: str, prompt: str) -> str | None:
-    async with httpx.AsyncClient(verify=False, timeout=30) as client:
+    async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=30) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
@@ -252,7 +247,7 @@ async def _call_openai_compat(
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     if extra_headers:
         headers.update(extra_headers)
-    async with httpx.AsyncClient(verify=False, timeout=30) as client:
+    async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=30) as client:
         resp = await client.post(
             url,
             headers=headers,
@@ -265,7 +260,7 @@ async def _call_openai_compat(
 
 async def _call_gemini(key: str, model: str, prompt: str) -> str | None:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-    async with httpx.AsyncClient(verify=False, timeout=30) as client:
+    async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=30) as client:
         resp = await client.post(
             url,
             headers={"Content-Type": "application/json"},

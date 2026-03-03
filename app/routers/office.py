@@ -15,9 +15,11 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any, Literal
 
-from app.deps import get_session, require_admin
+from app.config import settings
+from app.deps import get_session, require_admin, require_operator
 from app.database import fetch_one, fetch_all, execute
-from app.services.ai_stream import stream_ai
+from app.services.ai_provider import resolve_runtime_ai
+from app.services.ai_stream import extract_text_chunk, stream_ai
 from app.services.doc_extract import extract_doc_text
 from app.services.memory import get_memory_context, save_memory, get_memories
 from app.services.employee_prompt import (
@@ -269,16 +271,15 @@ async def run_task(body: RunTaskBody, session: dict = Depends(get_session)):
     emp_row = await fetch_one("SELECT ai_provider, ai_model FROM employee_profiles WHERE id=%s", (employee,)) or {}
 
     # Resolution order: request body → per-employee DB → global default → hardcoded fallback
-    provider = (body.provider if body.provider not in ("", "claude") else None) \
-               or emp_row.get("ai_provider") \
-               or cfg.get("default_ai_provider") \
-               or "claude"
-    model    = body.model_id \
-               or emp_row.get("ai_model") \
-               or cfg.get("default_ai_model") \
-               or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
-
-    api_key = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+    requested_provider = (body.provider if body.provider not in ("", "claude") else None) \
+                         or emp_row.get("ai_provider")
+    requested_model = body.model_id or emp_row.get("ai_model")
+    provider, model, api_key = resolve_runtime_ai(
+        cfg,
+        requested_provider,
+        requested_model,
+        fallback_provider=cfg.get("default_ai_provider") or "claude",
+    )
     if not api_key and provider != "ollama":
         raise HTTPException(400, f"{provider} API key not configured — go to Settings → AI Providers")
 
@@ -434,7 +435,7 @@ async def run_task(body: RunTaskBody, session: dict = Depends(get_session)):
             ai_response=full_response,
             api_key=api_key,
             provider=provider,
-            model=MODEL_DEFAULTS.get(provider, "claude-haiku-4-5-20251001"),
+            model=model,
         ))
 
     return StreamingResponse(
@@ -471,16 +472,15 @@ async def run_task_sync(body: RunSyncBody):
     cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
     emp_row  = await fetch_one("SELECT ai_provider, ai_model FROM employee_profiles WHERE id=%s", (employee,)) or {}
 
-    provider = (body.provider if body.provider not in ("", "claude") else None) \
-               or emp_row.get("ai_provider") \
-               or cfg.get("default_ai_provider") \
-               or "claude"
-    model    = body.model_id \
-               or emp_row.get("ai_model") \
-               or cfg.get("default_ai_model") \
-               or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
-
-    api_key = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+    requested_provider = (body.provider if body.provider not in ("", "claude") else None) \
+                         or emp_row.get("ai_provider")
+    requested_model = body.model_id or emp_row.get("ai_model")
+    provider, model, api_key = resolve_runtime_ai(
+        cfg,
+        requested_provider,
+        requested_model,
+        fallback_provider=cfg.get("default_ai_provider") or "claude",
+    )
     if not api_key and provider != "ollama":
         raise HTTPException(400, f"{provider} API key not configured")
 
@@ -552,7 +552,7 @@ async def run_task_sync(body: RunSyncBody):
         ai_response=response_text,
         api_key=api_key,
         provider=provider,
-        model=MODEL_DEFAULTS.get(provider, "claude-haiku-4-5-20251001"),
+        model=model,
     ))
 
     return {"ok": True, "employee": employee, "response": response_text}
@@ -795,11 +795,14 @@ async def collaborate(body: CollaborateBody, session: dict = Depends(get_session
     if not topic or not participants:
         raise HTTPException(400, "topic and at least one participant required")
 
-    cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-    provider = body.provider or cfg.get("default_ai_provider") or "claude"
-    model    = body.model_id or cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
-
-    api_key = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+    cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+    requested_provider = body.provider if body.provider not in ("", "claude") else None
+    provider, model, api_key = resolve_runtime_ai(
+        cfg,
+        requested_provider,
+        body.model_id or None,
+        fallback_provider=cfg.get("default_ai_provider") or "claude",
+    )
     if not api_key:
         raise HTTPException(400, f"{provider} API key not configured — go to Settings → AI Providers")
 
@@ -959,42 +962,13 @@ _TIMEOUT_QUICK = httpx.Timeout(30.0, connect=10.0)
 async def _quick_ai_call(provider: str, key: str, model: str, prompt: str) -> str:
     """Non-streaming single-shot AI call for short classification tasks."""
     try:
-        if provider == "claude":
-            async with httpx.AsyncClient(verify=False, timeout=_TIMEOUT_QUICK) as client:
-                r = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"x-api-key": key, "anthropic-version": "2023-06-01",
-                             "Content-Type": "application/json"},
-                    json={"model": model, "max_tokens": 200,
-                          "messages": [{"role": "user", "content": prompt}]},
-                )
-                return r.json()["content"][0]["text"]
-        elif provider in ("openai", "grok", "openrouter"):
-            if provider == "grok":
-                url = "https://api.x.ai/v1/chat/completions"
-                extra = {}
-            elif provider == "openrouter":
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                extra = {"HTTP-Referer": "https://noc-sentinel.tabadul", "X-Title": "NOC Sentinel"}
-            else:
-                url = "https://api.openai.com/v1/chat/completions"
-                extra = {}
-            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-            headers.update(extra)
-            async with httpx.AsyncClient(verify=False, timeout=_TIMEOUT_QUICK) as client:
-                r = await client.post(url, headers=headers,
-                    json={"model": model, "max_tokens": 200,
-                          "messages": [{"role": "user", "content": prompt}]},
-                )
-                return r.json()["choices"][0]["message"]["content"]
-        elif provider == "gemini":
-            url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-                   f"{model}:generateContent?key={key}")
-            async with httpx.AsyncClient(verify=False, timeout=_TIMEOUT_QUICK) as client:
-                r = await client.post(url, headers={"Content-Type": "application/json"},
-                    json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                          "generationConfig": {"maxOutputTokens": 200}})
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        chunks: list[str] = []
+        async for chunk in stream_ai(provider, key, model, "", prompt):
+            text = extract_text_chunk(chunk)
+            if text:
+                chunks.append(text)
+        if chunks:
+            return "".join(chunks).strip()
     except Exception:
         pass
     return '{"should_collab": false}'
@@ -1019,11 +993,14 @@ async def auto_collab(body: AutoCollabBody, session: dict = Depends(get_session)
     if body.employee_id not in DEFAULT_PERSONAS:
         return {"should_collab": False, "invite": [], "topic": ""}
 
-    cfg     = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-    provider = body.provider or cfg.get("default_ai_provider") or "claude"
-    model    = body.model_id or cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-sonnet-4-6")
-    key_map  = _KEY_MAP
-    api_key  = cfg.get(key_map.get(provider, "claude_key"), "")
+    cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+    requested_provider = body.provider if body.provider not in ("", "claude") else None
+    provider, model, api_key = resolve_runtime_ai(
+        cfg,
+        requested_provider,
+        body.model_id or None,
+        fallback_provider=cfg.get("default_ai_provider") or "claude",
+    )
     if not api_key:
         return {"should_collab": False, "invite": [], "topic": ""}
 
@@ -1301,13 +1278,16 @@ async def _generate_shift_briefing(employee_id: str, handover_id: int) -> None:
             for r in open_incs
         ) or "  No open incidents."
 
-        cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-        provider = cfg.get("default_ai_provider") or "claude"
-        api_key  = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+        cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+        provider, model, api_key = resolve_runtime_ai(
+            cfg,
+            cfg.get("default_ai_provider"),
+            cfg.get("default_ai_model"),
+            fallback_provider=cfg.get("default_ai_provider") or "claude",
+        )
         if not api_key and provider not in ("ollama",):
             return
 
-        model   = cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-haiku-4-5-20251001")
         persona = await build_employee_system_prompt(employee_id)
         system  = (
             (persona or f"You are {employee_id.upper()}, a NOC AI employee.")
@@ -1357,13 +1337,16 @@ async def _generate_shift_handover(employee_id: str, handover_id: int) -> str:
             for r in open_incs
         ) or "  All incidents closed."
 
-        cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-        provider = cfg.get("default_ai_provider") or "claude"
-        api_key  = cfg.get(_KEY_MAP.get(provider, "claude_key"), "")
+        cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+        provider, model, api_key = resolve_runtime_ai(
+            cfg,
+            cfg.get("default_ai_provider"),
+            cfg.get("default_ai_model"),
+            fallback_provider=cfg.get("default_ai_provider") or "claude",
+        )
         if not api_key and provider not in ("ollama",):
             return "[AI key not configured — handover not generated]"
 
-        model   = cfg.get("default_ai_model") or MODEL_DEFAULTS.get(provider, "claude-haiku-4-5-20251001")
         persona = await build_employee_system_prompt(employee_id)
         system  = (
             (persona or f"You are {employee_id.upper()}, a NOC AI employee.")
@@ -1946,7 +1929,7 @@ async def text_to_speech(body: TtsBody, session: dict = Depends(get_session)):
     voice = _TTS_VOICES.get((body.employee or "aria").lower(), "nova")
     speed = max(0.25, min(4.0, body.speed))
 
-    async with httpx.AsyncClient(verify=False, timeout=30) as client:
+    async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=30) as client:
         resp = await client.post(
             "https://api.openai.com/v1/audio/speech",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},

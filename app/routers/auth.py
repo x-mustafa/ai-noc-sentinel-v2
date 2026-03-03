@@ -1,29 +1,41 @@
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
-from collections import defaultdict
 import secrets
-import time
 
+from app.config import settings
 from app.database import fetch_one, execute
 from app.deps import get_session
 from app.services.ldap_auth import try_ldap_auth
+from app.services.rate_limit import (
+    assert_login_rate_limit,
+    record_login_failure,
+    reset_login_rate_limit,
+)
 from app.utils.password import hash_password, verify_password
 
 router = APIRouter()
 
 # ── Login rate limiter (in-memory; replace with Redis in scaled deployments) ──
-_login_attempts: dict[str, list[float]] = defaultdict(list)
-_LOGIN_WINDOW   = 900   # 15-minute sliding window
-_LOGIN_MAX      = 10    # max attempts before lockout
+_LOGIN_WINDOW   = settings.login_window_seconds
+_LOGIN_MAX      = settings.login_max_attempts
 
 
-def _check_rate_limit(ip: str) -> None:
-    now      = time.time()
-    recent   = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW]
-    _login_attempts[ip] = recent
-    if len(recent) >= _LOGIN_MAX:
-        raise HTTPException(429, "Too many login attempts. Try again in 15 minutes.")
-    _login_attempts[ip].append(now)
+def _get_client_ip(request: Request) -> str:
+    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    real_ip = (request.headers.get("X-Real-IP") or "").strip()
+    if real_ip:
+        return real_ip
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limit_identities(client_ip: str, username: str) -> list[str]:
+    identities = [f"ip:{client_ip or 'unknown'}"]
+    normalized_user = (username or "").strip().lower()
+    if normalized_user:
+        identities.append(f"user:{normalized_user}")
+    return identities
 
 
 class LoginBody(BaseModel):
@@ -38,9 +50,11 @@ class PasswordBody(BaseModel):
 
 @router.post("/login")
 async def login(body: LoginBody, request: Request):
-    _check_rate_limit(request.client.host if request.client else "unknown")
+    client_ip = _get_client_ip(request)
     username = body.username.strip()
     password = body.password
+    identities = _rate_limit_identities(client_ip, username)
+    await assert_login_rate_limit(identities, _LOGIN_WINDOW, _LOGIN_MAX)
 
     if not username or not password:
         raise HTTPException(400, "Username and password required")
@@ -54,6 +68,7 @@ async def login(body: LoginBody, request: Request):
     if ldap_cfg:
         ldap_result = await try_ldap_auth(username, password, ldap_cfg)
         if ldap_result is False:
+            await record_login_failure(identities, _LOGIN_WINDOW, _LOGIN_MAX)
             raise HTTPException(401, "Invalid credentials")
         if isinstance(ldap_result, dict):
             existing = await fetch_one("SELECT id FROM users WHERE username=%s LIMIT 1", (username,))
@@ -72,6 +87,7 @@ async def login(body: LoginBody, request: Request):
                      ldap_result["role"], ldap_result["display_name"],
                      ldap_result["email"], ldap_result["dn"]),
                 )
+            await reset_login_rate_limit([f"user:{username.lower()}"])
             request.session["uid"]      = uid
             request.session["username"] = username
             request.session["role"]     = ldap_result["role"]
@@ -81,11 +97,13 @@ async def login(body: LoginBody, request: Request):
     row = await fetch_one("SELECT * FROM users WHERE username=%s LIMIT 1", (username,))
     if row and verify_password(password, row["password_hash"]):
         await execute("UPDATE users SET last_login=NOW() WHERE id=%s", (row["id"],))
+        await reset_login_rate_limit([f"user:{username.lower()}"])
         request.session["uid"]      = row["id"]
         request.session["username"] = row["username"]
         request.session["role"]     = row["role"]
         return {"ok": True, "user": {"id": row["id"], "username": row["username"], "role": row["role"]}}
 
+    await record_login_failure(identities, _LOGIN_WINDOW, _LOGIN_MAX)
     raise HTTPException(401, "Invalid credentials")
 
 
@@ -102,8 +120,8 @@ async def me(session: dict = Depends(get_session)):
 
 @router.post("/password")
 async def change_password(body: PasswordBody, session: dict = Depends(get_session)):
-    if len(body.new) < 4:
-        raise HTTPException(400, "Password too short (min 4)")
+    if len(body.new) < settings.password_min_length:
+        raise HTTPException(400, f"Password too short (min {settings.password_min_length})")
     row = await fetch_one("SELECT password_hash FROM users WHERE id=%s", (session["uid"],))
     if not row or not verify_password(body.current, row["password_hash"]):
         raise HTTPException(403, "Current password incorrect")

@@ -1,5 +1,6 @@
 import httpx
 import logging
+from app.config import settings
 from app.database import fetch_one
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,10 @@ async def get_zabbix_config() -> dict:
 
 async def call_zabbix(method: str, params: dict = None, cfg_override: dict = None):
     cfg = cfg_override or await get_zabbix_config()
-    url = cfg["url"].rstrip("/") + "/api_jsonrpc.php"
+    base_url = (cfg.get("url") or "").strip()
+    if not base_url:
+        return {"_zabbix_error": "Zabbix URL not configured"}
+    url = base_url.rstrip("/") + "/api_jsonrpc.php"
     token = cfg.get("token", "")
 
     headers = {"Content-Type": "application/json"}
@@ -30,12 +34,17 @@ async def call_zabbix(method: str, params: dict = None, cfg_override: dict = Non
     }
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=15.0) as client:
+        async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=15.0) as client:
             resp = await client.post(url, json=payload, headers=headers)
-            data = resp.json()
+            resp.raise_for_status()
+            try:
+                data = resp.json()
+            except ValueError:
+                logger.error(f"Zabbix returned non-JSON response (HTTP {resp.status_code})")
+                return {"_zabbix_error": f"Invalid Zabbix response (HTTP {resp.status_code})"}
     except Exception as e:
         logger.error(f"Zabbix call failed: {e}")
-        return None
+        return {"_zabbix_error": str(e)}
 
     if "error" in data:
         err = data["error"]

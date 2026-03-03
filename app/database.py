@@ -1,6 +1,7 @@
 import aiomysql
 from app.config import settings
 import logging
+from typing import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,79 @@ async def execute_many(sql: str, params_list: list) -> None:
             await cur.executemany(sql, params_list)
 
 
-async def run_migration():
-    """Create new tables needed by Python version if they don't exist."""
+async def _apply_baseline_migration():
+    """Apply the legacy baseline schema and seed reference data."""
     sqls = [
+        """CREATE TABLE IF NOT EXISTS `users` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `username` VARCHAR(100) NOT NULL UNIQUE,
+            `password_hash` VARCHAR(255) NOT NULL,
+            `role` ENUM('admin','operator','viewer') DEFAULT 'operator',
+            `display_name` VARCHAR(150) DEFAULT NULL,
+            `email` VARCHAR(200) DEFAULT NULL,
+            `ldap_dn` VARCHAR(255) DEFAULT NULL,
+            `last_login` TIMESTAMP NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB""",
+
+        """CREATE TABLE IF NOT EXISTS `ldap_config` (
+            `id` INT PRIMARY KEY,
+            `host` VARCHAR(255) DEFAULT '',
+            `port` INT DEFAULT 389,
+            `base_dn` VARCHAR(255) DEFAULT '',
+            `bind_dn` VARCHAR(255) DEFAULT '',
+            `bind_pass` VARCHAR(255) DEFAULT '',
+            `user_filter` VARCHAR(255) DEFAULT '(&(objectClass=user)(sAMAccountName=%%s))',
+            `admin_group` VARCHAR(255) DEFAULT '',
+            `operator_group` VARCHAR(255) DEFAULT '',
+            `use_tls` TINYINT(1) DEFAULT 0,
+            `enabled` TINYINT(1) DEFAULT 0,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB""",
+
+        "INSERT IGNORE INTO `ldap_config` (`id`) VALUES (1)",
+
+        """CREATE TABLE IF NOT EXISTS `zabbix_config` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `url` VARCHAR(500) DEFAULT '',
+            `token` TEXT,
+            `refresh` INT DEFAULT 30,
+            `default_ai_provider` VARCHAR(50) DEFAULT 'claude',
+            `default_ai_model` VARCHAR(200) DEFAULT '',
+            `claude_key` VARCHAR(500) DEFAULT '',
+            `openai_key` VARCHAR(500) DEFAULT '',
+            `gemini_key` VARCHAR(500) DEFAULT '',
+            `grok_key` VARCHAR(500) DEFAULT '',
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB""",
+
+        """CREATE TABLE IF NOT EXISTS `map_layouts` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `name` VARCHAR(150) NOT NULL,
+            `positions` LONGTEXT,
+            `is_default` TINYINT(1) DEFAULT 0,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB""",
+
+        """CREATE TABLE IF NOT EXISTS `map_nodes` (
+            `id` VARCHAR(100) PRIMARY KEY,
+            `label` VARCHAR(200) NOT NULL,
+            `ip` VARCHAR(100) DEFAULT '',
+            `role` VARCHAR(100) DEFAULT '',
+            `type` VARCHAR(50) DEFAULT 'switch',
+            `layer_key` VARCHAR(50) DEFAULT 'srv',
+            `x` DOUBLE DEFAULT 0,
+            `y` DOUBLE DEFAULT 0,
+            `status` VARCHAR(50) DEFAULT 'ok',
+            `ifaces` LONGTEXT,
+            `info` LONGTEXT,
+            `zabbix_host_id` VARCHAR(50) DEFAULT NULL,
+            `layout_id` INT DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_map_layout` (`layout_id`),
+            INDEX `idx_map_zbx` (`zabbix_host_id`)
+        ) ENGINE=InnoDB""",
+
         """CREATE TABLE IF NOT EXISTS `employee_profiles` (
             `id` VARCHAR(20) PRIMARY KEY,
             `title` VARCHAR(100),
@@ -394,8 +465,8 @@ async def run_migration():
             `employee_id`     VARCHAR(20),
             `affected_hosts`  TEXT,
             `expected_impact` VARCHAR(500),
-            `start_at`        TIMESTAMP NOT NULL,
-            `end_at`          TIMESTAMP NOT NULL,
+            `start_at`        DATETIME NOT NULL,
+            `end_at`          DATETIME NOT NULL,
             `status`          ENUM('planned','active','completed','cancelled') DEFAULT 'planned',
             `notes`           TEXT,
             `created_at`      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -457,7 +528,11 @@ async def run_migration():
         try:
             await execute(sql)
         except Exception as e:
-            logger.warning(f"Migration step failed (may already exist): {e}")
+            msg = str(e)
+            if _is_benign_migration_error(msg):
+                logger.warning(f"Migration step skipped: {msg}")
+                continue
+            raise
 
     # Seed default employee profiles
     defaults = [
@@ -507,3 +582,182 @@ async def run_migration():
             )
         except Exception:
             pass
+
+
+async def _add_service_heartbeat_table():
+    await execute(
+        """CREATE TABLE IF NOT EXISTS `service_heartbeats` (
+            `service_name` VARCHAR(100) PRIMARY KEY,
+            `status`       VARCHAR(32) NOT NULL DEFAULT 'ok',
+            `details`      VARCHAR(255) DEFAULT '',
+            `updated_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB"""
+    )
+
+
+async def _add_workflow_approval_controls():
+    statements = [
+        "ALTER TABLE `workflows` ADD COLUMN IF NOT EXISTS `risk_tier` VARCHAR(32) NOT NULL DEFAULT 'safe_auto'",
+        "ALTER TABLE `workflow_runs` MODIFY COLUMN `status` VARCHAR(32) NOT NULL DEFAULT 'running'",
+        "ALTER TABLE `workflow_runs` ADD COLUMN IF NOT EXISTS `effective_risk_tier` VARCHAR(32) NOT NULL DEFAULT 'safe_auto'",
+        "ALTER TABLE `workflow_runs` ADD COLUMN IF NOT EXISTS `approval_id` INT NULL",
+        """CREATE TABLE IF NOT EXISTS `workflow_approvals` (
+            `id`                  INT AUTO_INCREMENT PRIMARY KEY,
+            `workflow_id`         INT NOT NULL,
+            `workflow_run_id`     INT NOT NULL,
+            `effective_risk_tier` VARCHAR(32) NOT NULL,
+            `requested_by`        VARCHAR(100) DEFAULT 'system',
+            `trigger_data`        LONGTEXT,
+            `ai_response`         LONGTEXT,
+            `action_plan`         TEXT,
+            `status`              VARCHAR(32) NOT NULL DEFAULT 'pending',
+            `decision_note`       TEXT,
+            `decided_by`          VARCHAR(100) DEFAULT NULL,
+            `requested_at`        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `decided_at`          TIMESTAMP NULL DEFAULT NULL,
+            `executed_at`         TIMESTAMP NULL DEFAULT NULL,
+            INDEX `idx_wfa_status` (`status`, `requested_at`),
+            INDEX `idx_wfa_workflow` (`workflow_id`, `requested_at`)
+        ) ENGINE=InnoDB""",
+    ]
+    for sql in statements:
+        await execute(sql)
+
+
+async def _add_incident_runbook_coverage_fields():
+    statements = [
+        "ALTER TABLE `incidents` ADD COLUMN IF NOT EXISTS `runbook_id` INT NULL",
+        "ALTER TABLE `runbooks` ADD COLUMN IF NOT EXISTS `source_incident_id` INT NULL",
+        "ALTER TABLE `runbooks` ADD COLUMN IF NOT EXISTS `validation_status` VARCHAR(32) NOT NULL DEFAULT 'untested'",
+    ]
+    for sql in statements:
+        await execute(sql)
+
+
+async def _add_observability_settings():
+    statements = [
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `grafana_url` VARCHAR(2000) DEFAULT 'https://grafana.tabadul.iq/dashboards'",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `grafana_username` VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `grafana_password` VARCHAR(500) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `zabbix_web_url` VARCHAR(2000) DEFAULT 'https://zabbix.tabadul.iq/zabbix.php?action=dashboard.view&dashboardid=1&from=now-15m&to=now'",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `zabbix_web_username` VARCHAR(200) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `zabbix_web_password` VARCHAR(500) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `kuma_url` VARCHAR(2000) DEFAULT ''",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `observability_auto_monitor_enabled` TINYINT(1) NOT NULL DEFAULT 0",
+        "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `observability_monitor_interval_minutes` INT NOT NULL DEFAULT 5",
+    ]
+    for sql in statements:
+        await execute(sql)
+
+
+_MIGRATIONS: list[tuple[str, str, Callable[[], Awaitable[None]]]] = [
+    ("20260303_0001_baseline", "Baseline schema and seed data", _apply_baseline_migration),
+    ("20260303_0002_service_heartbeats", "Service heartbeat registry", _add_service_heartbeat_table),
+    ("20260303_0003_workflow_approval_controls", "Workflow risk tiers and approval controls", _add_workflow_approval_controls),
+    ("20260303_0004_incident_runbook_coverage", "Incident to runbook coverage fields", _add_incident_runbook_coverage_fields),
+    ("20260303_0005_observability_settings", "Observability credentials and auto-monitor settings", _add_observability_settings),
+]
+
+
+def _is_benign_migration_error(message: str) -> bool:
+    benign_markers = (
+        "already exists",
+        "Duplicate column name",
+        "Duplicate entry",
+    )
+    return any(marker in message for marker in benign_markers)
+
+
+async def _ensure_migration_table() -> None:
+    row = await fetch_one(
+        "SELECT COUNT(*) AS c "
+        "FROM information_schema.tables "
+        "WHERE table_schema = DATABASE() AND table_name = 'schema_migrations'"
+    )
+    if row and row.get("c"):
+        return
+    await execute(
+        """CREATE TABLE IF NOT EXISTS `schema_migrations` (
+            `migration_id` VARCHAR(100) PRIMARY KEY,
+            `name`         VARCHAR(255) NOT NULL,
+            `applied_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB"""
+    )
+
+
+async def _get_applied_migration_ids() -> set[str]:
+    rows = await fetch_all("SELECT migration_id FROM schema_migrations ORDER BY migration_id")
+    return {row["migration_id"] for row in rows}
+
+
+async def _table_exists(table_name: str) -> bool:
+    row = await fetch_one(
+        "SELECT COUNT(*) AS c "
+        "FROM information_schema.tables "
+        "WHERE table_schema = DATABASE() AND table_name = %s",
+        (table_name,),
+    )
+    return bool(row and row.get("c"))
+
+
+async def _legacy_schema_present() -> bool:
+    # Any of these existing without migration records means this is a pre-tracking install.
+    for table_name in ("employee_profiles", "workflows", "zabbix_config"):
+        if await _table_exists(table_name):
+            return True
+    return False
+
+
+async def _record_migration(migration_id: str, name: str) -> None:
+    await execute(
+        "INSERT IGNORE INTO schema_migrations (migration_id, name) VALUES (%s, %s)",
+        (migration_id, name),
+    )
+
+
+async def _apply_pending_migrations() -> list[str]:
+    applied = await _get_applied_migration_ids()
+    applied_now: list[str] = []
+
+    for migration_id, name, fn in _MIGRATIONS:
+        if migration_id in applied:
+            continue
+        logger.info(f"Applying DB migration {migration_id} ({name})...")
+        await fn()
+        await _record_migration(migration_id, name)
+        applied_now.append(migration_id)
+
+    return applied_now
+
+
+async def _reconcile_legacy_schema_if_needed() -> list[str]:
+    applied = await _get_applied_migration_ids()
+    if applied:
+        return []
+
+    if not await _legacy_schema_present():
+        return []
+
+    logger.info(
+        "Legacy schema detected without migration tracking. "
+        "Running one-time reconciliation to register the baseline migration."
+    )
+    return await _apply_pending_migrations()
+
+
+async def get_pending_migrations() -> list[dict]:
+    await _ensure_migration_table()
+    await _reconcile_legacy_schema_if_needed()
+    applied = await _get_applied_migration_ids()
+    return [
+        {"migration_id": migration_id, "name": name}
+        for migration_id, name, _ in _MIGRATIONS
+        if migration_id not in applied
+    ]
+
+
+async def run_migration() -> list[str]:
+    """Apply any pending tracked migrations and return their IDs."""
+    await _ensure_migration_table()
+    await _reconcile_legacy_schema_if_needed()
+    return await _apply_pending_migrations()

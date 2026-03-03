@@ -18,6 +18,8 @@ from urllib.parse import urlencode
 
 import httpx
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -43,6 +45,11 @@ async def _get_db_config() -> dict:
         return row or {}
     except Exception:
         return {}
+
+
+async def _has_oauth_connection() -> bool:
+    cfg = await _get_db_config()
+    return bool(cfg.get("ms365_oauth_refresh_token"))
 
 
 async def _get_token() -> str:
@@ -509,7 +516,12 @@ async def list_teams() -> list[dict]:
         if resp.status_code != 200:
             return [{"error": f"Graph {resp.status_code}"}]
         return [
-            {"id": t["id"], "name": t.get("displayName",""), "description": t.get("description","")}
+            {
+                "id": t["id"],
+                "name": t.get("displayName", ""),
+                "displayName": t.get("displayName", ""),
+                "description": t.get("description", ""),
+            }
             for t in resp.json().get("value", [])
         ]
     except Exception as e:
@@ -528,7 +540,13 @@ async def list_team_channels(team_id: str) -> list[dict]:
         if resp.status_code != 200:
             return [{"error": f"Graph {resp.status_code}"}]
         return [
-            {"id": ch["id"], "name": ch.get("displayName",""), "type": ch.get("membershipType","standard")}
+            {
+                "id": ch["id"],
+                "name": ch.get("displayName", ""),
+                "displayName": ch.get("displayName", ""),
+                "type": ch.get("membershipType", "standard"),
+                "membershipType": ch.get("membershipType", "standard"),
+            }
             for ch in resp.json().get("value", [])
         ]
     except Exception as e:
@@ -536,18 +554,19 @@ async def list_team_channels(team_id: str) -> list[dict]:
 
 
 async def list_chats(limit: int = 50) -> list[dict]:
-    """List group chats and meetings. Requires Chat.ReadWrite.All."""
+    """List recent Teams chats. Requires delegated Chat permissions."""
     if not await is_configured_async():
         return []
-    ms365_email = await get_ms365_email()
+    if not await _has_oauth_connection():
+        return [{
+            "error": (
+                "Teams group chats require delegated Microsoft 365 OAuth sign-in. "
+                "Open Settings > Microsoft 365 and connect an account with Chat permissions."
+            )
+        }]
     try:
         token = await _get_token()
-        url   = (
-            f"{GRAPH}/users/{ms365_email}/chats"
-            f"?$filter=chatType eq 'group' or chatType eq 'meeting'"
-            f"&$select=id,topic,chatType,lastUpdatedDateTime"
-            f"&$top={limit}&$orderby=lastUpdatedDateTime desc"
-        )
+        url   = f"{GRAPH}/me/chats?$top={max(1, min(limit, 50))}"
         async with httpx.AsyncClient(timeout=15) as c:
             resp = await c.get(url, headers={"Authorization": f"Bearer {token}"})
         if resp.status_code != 200:
@@ -557,15 +576,26 @@ async def list_chats(limit: int = 50) -> list[dict]:
             except Exception:
                 msg = resp.text[:200]
             return [{"error": f"Graph {resp.status_code} — {msg}"}]
-        return [
-            {
-                "id":       ch["id"],
-                "name":     ch.get("topic") or f"Group Chat ({ch.get('chatType','')})",
-                "type":     ch.get("chatType",""),
-                "updated":  ch.get("lastUpdatedDateTime",""),
-            }
-            for ch in resp.json().get("value", [])
-        ]
+        chats = []
+        for ch in resp.json().get("value", []):
+            chat_type = ch.get("chatType", "") or "unknown"
+            if chat_type == "oneOnOne":
+                display_name = ch.get("topic") or "Direct Chat"
+            else:
+                display_name = ch.get("topic") or f"Chat ({chat_type})"
+            chats.append(
+                {
+                    "id": ch["id"],
+                    "topic": display_name,
+                    "chatType": chat_type,
+                    "lastUpdatedDateTime": ch.get("lastUpdatedDateTime", ""),
+                    "name": display_name,
+                    "type": chat_type,
+                    "updated": ch.get("lastUpdatedDateTime", ""),
+                }
+            )
+        chats.sort(key=lambda ch: ch.get("lastUpdatedDateTime", ""), reverse=True)
+        return chats[:limit]
     except Exception as e:
         return [{"error": str(e)}]
 
@@ -574,6 +604,13 @@ async def get_chat_messages(chat_id: str, limit: int = 20) -> list[dict]:
     """Get recent messages from a Teams chat. Requires Chat.ReadWrite.All."""
     if not await is_configured_async():
         return []
+    if not await _has_oauth_connection():
+        return [{
+            "error": (
+                "Teams group chats require delegated Microsoft 365 OAuth sign-in. "
+                "Open Settings > Microsoft 365 and connect an account with Chat permissions."
+            )
+        }]
     try:
         token = await _get_token()
         url   = (
@@ -588,12 +625,15 @@ async def get_chat_messages(chat_id: str, limit: int = 20) -> list[dict]:
         msgs = resp.json().get("value", [])
         return [
             {
-                "id":      m.get("id",""),
-                "from":    m.get("from",{}).get("user",{}).get("displayName","") or
-                           m.get("from",{}).get("application",{}).get("displayName",""),
-                "body":    m.get("body",{}).get("content",""),
-                "type":    m.get("body",{}).get("contentType","text"),
-                "date":    m.get("createdDateTime",""),
+                "id": m.get("id", ""),
+                "from": m.get("from", {}),
+                "body": m.get("body", {}),
+                "createdDateTime": m.get("createdDateTime", ""),
+                "messageType": m.get("messageType", ""),
+                "sender": m.get("from", {}).get("user", {}).get("displayName", "") or
+                          m.get("from", {}).get("application", {}).get("displayName", ""),
+                "text": m.get("body", {}).get("content", ""),
+                "date": m.get("createdDateTime", ""),
             }
             for m in msgs if m.get("messageType","") == "message"
         ]
@@ -609,6 +649,14 @@ async def send_to_chat(
     """Send a message to a Teams chat via Graph API. Requires Chat.ReadWrite.All."""
     if not await is_configured_async():
         return {"ok": False, "error": "M365 not configured"}
+    if not await _has_oauth_connection():
+        return {
+            "ok": False,
+            "error": (
+                "Teams group chats require delegated Microsoft 365 OAuth sign-in. "
+                "Open Settings > Microsoft 365 and connect an account with Chat permissions."
+            ),
+        }
     emp_name = EMPLOYEE_NAMES.get(employee_id, employee_id.upper())
     html_body = message.replace("\n", "<br>") + f"<br><em>— {emp_name} | NOC Sentinel</em>"
     try:
@@ -757,7 +805,7 @@ async def send_teams_message(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=15, verify=False) as client:
+        async with httpx.AsyncClient(timeout=15, verify=settings.outbound_tls_verify) as client:
             resp = await client.post(
                 webhook_url,
                 json=payload,

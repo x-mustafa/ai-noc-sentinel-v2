@@ -25,6 +25,7 @@ _VALID_EMPLOYEES = {"aria", "nexus", "cipher", "vega"}
 class RunbookBody(BaseModel):
     title:             str = Field(..., max_length=300)
     author_id:         Optional[str] = None
+    source_incident_id: Optional[int] = None
     trigger_desc:      Optional[str] = None
     trigger_keywords:  Optional[str] = None   # comma-separated
     symptoms:          Optional[str] = None
@@ -35,6 +36,7 @@ class RunbookBody(BaseModel):
     estimated_mttr:    Optional[int] = None   # minutes
     related_hosts:     Optional[str] = None   # comma-separated
     status:            Literal["draft", "approved", "deprecated"] = "draft"
+    validation_status: Literal["untested", "candidate", "validated"] = "untested"
 
 
 class RunbookPatchBody(BaseModel):
@@ -49,6 +51,7 @@ class RunbookPatchBody(BaseModel):
     estimated_mttr:    Optional[int] = None
     related_hosts:     Optional[str] = None
     status:            Optional[Literal["draft", "approved", "deprecated"]] = None
+    validation_status: Optional[Literal["untested", "candidate", "validated"]] = None
     last_tested:       Optional[str] = None   # YYYY-MM-DD
 
 
@@ -62,6 +65,7 @@ class MatchBody(BaseModel):
 async def list_runbooks(
     status: Optional[str] = None,
     author: Optional[str] = None,
+    include_deprecated: bool = False,
     session: dict = Depends(get_session),
 ):
     """List runbooks. Defaults to non-deprecated."""
@@ -69,7 +73,7 @@ async def list_runbooks(
     if status:
         where.append("status=%s")
         params.append(status)
-    else:
+    elif not include_deprecated:
         where.append("status != 'deprecated'")
     if author:
         where.append("author_id=%s")
@@ -77,8 +81,8 @@ async def list_runbooks(
 
     clause = "WHERE " + " AND ".join(where) if where else ""
     rows = await fetch_all(
-        f"SELECT id, title, author_id, trigger_keywords, estimated_mttr, "
-        f"status, related_hosts, last_tested, updated_at "
+        f"SELECT id, title, author_id, source_incident_id, trigger_keywords, estimated_mttr, "
+        f"status, validation_status, related_hosts, last_tested, updated_at "
         f"FROM runbooks {clause} ORDER BY updated_at DESC LIMIT 100",
         tuple(params) or None,
     )
@@ -89,19 +93,20 @@ async def list_runbooks(
 
 
 @router.post("")
-async def create_runbook(body: RunbookBody, session: dict = Depends(get_session)):
+async def create_runbook(body: RunbookBody, session: dict = Depends(require_operator)):
     """Create a new runbook."""
     if body.author_id and body.author_id not in _VALID_EMPLOYEES:
         raise HTTPException(400, f"Invalid author_id: {body.author_id}")
 
     rb_id = await execute(
         "INSERT INTO runbooks "
-        "(title, author_id, trigger_desc, trigger_keywords, symptoms, diagnosis, "
-        "resolution, prevention, rollback, estimated_mttr, related_hosts, status) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "(title, author_id, source_incident_id, trigger_desc, trigger_keywords, symptoms, diagnosis, "
+        "resolution, prevention, rollback, estimated_mttr, related_hosts, status, validation_status) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (
             body.title,
             body.author_id,
+            body.source_incident_id,
             body.trigger_desc,
             body.trigger_keywords,
             body.symptoms,
@@ -112,14 +117,140 @@ async def create_runbook(body: RunbookBody, session: dict = Depends(get_session)
             body.estimated_mttr,
             body.related_hosts,
             body.status,
+            body.validation_status,
         ),
     )
+    if body.source_incident_id:
+        await execute("UPDATE incidents SET runbook_id=%s WHERE id=%s", (rb_id, body.source_incident_id))
     return {"ok": True, "id": rb_id}
 
 
 # ── Single Runbook ──────────────────────────────────────────────────────────────
 
-@router.get("/{rb_id}")
+def _build_runbook_draft_from_incident(incident: dict, updates: list[dict]) -> dict:
+    status_lines = []
+    finding_lines = []
+    action_lines = []
+    resolution_lines = []
+    for update in updates:
+        line = str(update.get("update_text") or "").strip()
+        if not line:
+            continue
+        update_type = update.get("update_type") or "finding"
+        if update_type == "status":
+            status_lines.append(line)
+        elif update_type == "finding":
+            finding_lines.append(line)
+        elif update_type == "action":
+            action_lines.append(line)
+        elif update_type == "resolution":
+            resolution_lines.append(line)
+
+    title = f"Runbook: {incident.get('title') or 'Untitled incident'}"
+    host = (incident.get("host") or "").strip()
+    keywords = [host] if host else []
+    for token in (incident.get("title") or "").replace("/", " ").replace("-", " ").split():
+        normalized = token.strip().lower()
+        if len(normalized) >= 4 and normalized not in keywords:
+            keywords.append(normalized)
+        if len(keywords) >= 8:
+            break
+
+    return {
+        "title": title[:300],
+        "trigger_desc": incident.get("description") or incident.get("title") or "",
+        "trigger_keywords": ",".join(keywords[:8]),
+        "symptoms": "\n".join(status_lines[:5]) or incident.get("description") or "",
+        "diagnosis": "\n".join(finding_lines[:8]) or incident.get("rca") or "",
+        "resolution": "\n".join((resolution_lines or action_lines)[:10]) or "Document the confirmed fix here.",
+        "prevention": incident.get("rca") or "Add monitoring and operator checks to prevent recurrence.",
+        "rollback": "Document rollback and validation steps before approving for production use.",
+        "related_hosts": host,
+    }
+
+
+@router.get("/coverage")
+async def runbook_coverage(session: dict = Depends(get_session)):
+    totals = await fetch_one(
+        "SELECT "
+        "SUM(CASE WHEN status IN ('resolved','closed') THEN 1 ELSE 0 END) AS resolved_total, "
+        "SUM(CASE WHEN status IN ('resolved','closed') AND runbook_id IS NOT NULL THEN 1 ELSE 0 END) AS linked_total "
+        "FROM incidents"
+    ) or {}
+    runbook_totals = await fetch_one(
+        "SELECT "
+        "COUNT(*) AS total_runbooks, "
+        "SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved_runbooks, "
+        "SUM(CASE WHEN validation_status='validated' THEN 1 ELSE 0 END) AS validated_runbooks, "
+        "SUM(CASE WHEN validation_status='candidate' THEN 1 ELSE 0 END) AS candidate_runbooks "
+        "FROM runbooks"
+    ) or {}
+    gaps = await fetch_all(
+        "SELECT id, title, severity, status, host, resolved_at "
+        "FROM incidents "
+        "WHERE status IN ('resolved','closed') AND runbook_id IS NULL "
+        "ORDER BY resolved_at DESC LIMIT 20"
+    )
+    for gap in gaps:
+        gap["resolved_at"] = str(gap.get("resolved_at", "") or "")
+    resolved_total = int(totals.get("resolved_total") or 0)
+    linked_total = int(totals.get("linked_total") or 0)
+    coverage_pct = round((linked_total / resolved_total) * 100, 2) if resolved_total else 0.0
+    return {
+        "resolved_incidents": resolved_total,
+        "linked_incidents": linked_total,
+        "coverage_percent": coverage_pct,
+        "runbooks_total": int(runbook_totals.get("total_runbooks") or 0),
+        "approved_runbooks": int(runbook_totals.get("approved_runbooks") or 0),
+        "validated_runbooks": int(runbook_totals.get("validated_runbooks") or 0),
+        "candidate_runbooks": int(runbook_totals.get("candidate_runbooks") or 0),
+        "gaps": gaps,
+    }
+
+
+@router.post("/from-incident/{inc_id:int}")
+async def create_runbook_from_incident(
+    inc_id: int,
+    session: dict = Depends(require_operator),
+):
+    incident = await fetch_one("SELECT * FROM incidents WHERE id=%s", (inc_id,))
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    if incident.get("status") not in ("resolved", "closed"):
+        raise HTTPException(400, "Incident must be resolved or closed before drafting a runbook")
+    if incident.get("runbook_id"):
+        raise HTTPException(400, "Incident already linked to a runbook")
+
+    updates = await fetch_all(
+        "SELECT update_text, update_type FROM incident_updates WHERE incident_id=%s ORDER BY created_at ASC",
+        (inc_id,),
+    )
+    draft = _build_runbook_draft_from_incident(incident, updates)
+    rb_id = await execute(
+        "INSERT INTO runbooks "
+        "(title, author_id, source_incident_id, trigger_desc, trigger_keywords, symptoms, diagnosis, "
+        "resolution, prevention, rollback, estimated_mttr, related_hosts, status, validation_status) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'draft','candidate')",
+        (
+            draft["title"],
+            incident.get("owner_id"),
+            inc_id,
+            draft["trigger_desc"],
+            draft["trigger_keywords"],
+            draft["symptoms"],
+            draft["diagnosis"],
+            draft["resolution"],
+            draft["prevention"],
+            draft["rollback"],
+            None,
+            draft["related_hosts"],
+        ),
+    )
+    await execute("UPDATE incidents SET runbook_id=%s WHERE id=%s", (rb_id, inc_id))
+    return {"ok": True, "id": rb_id, "source_incident_id": inc_id}
+
+
+@router.get("/{rb_id:int}")
 async def get_runbook(rb_id: int, session: dict = Depends(get_session)):
     """Get full runbook content."""
     row = await fetch_one("SELECT * FROM runbooks WHERE id=%s", (rb_id,))
@@ -131,11 +262,11 @@ async def get_runbook(rb_id: int, session: dict = Depends(get_session)):
     return row
 
 
-@router.patch("/{rb_id}")
+@router.patch("/{rb_id:int}")
 async def update_runbook(
     rb_id: int,
     body: RunbookPatchBody,
-    session: dict = Depends(get_session),
+    session: dict = Depends(require_operator),
 ):
     """Update runbook fields."""
     row = await fetch_one("SELECT id FROM runbooks WHERE id=%s", (rb_id,))
@@ -154,6 +285,7 @@ async def update_runbook(
         "estimated_mttr":   body.estimated_mttr,
         "related_hosts":    body.related_hosts,
         "status":           body.status,
+        "validation_status": body.validation_status,
         "last_tested":      body.last_tested,
     }
     sets, vals = [], []
@@ -171,7 +303,7 @@ async def update_runbook(
     return {"ok": True}
 
 
-@router.put("/{rb_id}/approve")
+@router.put("/{rb_id:int}/approve")
 async def approve_runbook(rb_id: int, session: dict = Depends(require_operator)):
     """Promote a draft runbook to approved status (operator only)."""
     row = await fetch_one("SELECT id, status FROM runbooks WHERE id=%s", (rb_id,))
@@ -184,7 +316,7 @@ async def approve_runbook(rb_id: int, session: dict = Depends(require_operator))
     return {"ok": True}
 
 
-@router.delete("/{rb_id}")
+@router.delete("/{rb_id:int}")
 async def deprecate_runbook(rb_id: int, session: dict = Depends(require_operator)):
     """Mark a runbook as deprecated (soft delete)."""
     row = await fetch_one("SELECT id FROM runbooks WHERE id=%s", (rb_id,))

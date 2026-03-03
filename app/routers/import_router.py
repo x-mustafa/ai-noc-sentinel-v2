@@ -9,6 +9,7 @@ from typing import Optional, List, Any
 
 import httpx
 
+from app.config import settings
 from app.deps import get_session, require_admin, require_operator
 from app.database import fetch_one, execute
 from app.services.zabbix_client import call_zabbix
@@ -48,7 +49,7 @@ async def analyze_diagram(
         'Example: [{"name":"Core-SW-01","ip":"10.0.0.1","type":"switch"}]'
     )
 
-    async with httpx.AsyncClient(verify=False, timeout=90) as client:
+    async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=90) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": claude_key, "anthropic-version": "2023-06-01",
@@ -190,6 +191,26 @@ async def get_ai_keys(session: dict = Depends(get_session)):
         return (k[:12] + "*" * 16 + k[-6:]) if len(k) > 18 else ("*" * len(k) if k else "")
 
     ollama = cfg.get("ollama_url") or "http://localhost:11434"
+    provider_catalog = [
+        {"value": "claude", "label": "Claude (Anthropic)", "configured": bool(cfg.get("claude_key"))},
+        {"value": "openai", "label": "OpenAI GPT/Codex", "configured": bool(cfg.get("openai_key"))},
+        {"value": "gemini", "label": "Google Gemini", "configured": bool(cfg.get("gemini_key"))},
+        {"value": "grok", "label": "xAI Grok", "configured": bool(cfg.get("grok_key"))},
+        {"value": "openrouter", "label": "OpenRouter", "configured": bool(cfg.get("openrouter_key"))},
+        {"value": "groq", "label": "Groq (free)", "configured": bool(cfg.get("groq_key"))},
+        {"value": "deepseek", "label": "DeepSeek", "configured": bool(cfg.get("deepseek_key"))},
+        {"value": "mistral", "label": "Mistral AI", "configured": bool(cfg.get("mistral_key"))},
+        {"value": "together", "label": "Together.ai", "configured": bool(cfg.get("together_key"))},
+        {"value": "ollama", "label": "Ollama (local)", "configured": True},
+        {"value": "claude_web", "label": "Claude Web (subscription)", "configured": bool(cfg.get("claude_web_session"))},
+        {"value": "chatgpt_web", "label": "ChatGPT Web (subscription)", "configured": bool(cfg.get("chatgpt_web_token"))},
+    ]
+    default_provider = cfg.get("default_ai_provider") or "claude"
+    configured_providers = [item for item in provider_catalog if item["configured"]]
+    if default_provider and not any(item["value"] == default_provider for item in configured_providers):
+        fallback = next((item for item in provider_catalog if item["value"] == default_provider), None)
+        if fallback:
+            configured_providers.append(fallback)
 
     return {
         "claude":           {"has": bool(cfg.get("claude_key")),            "masked": mask(cfg.get("claude_key"))},
@@ -204,8 +225,10 @@ async def get_ai_keys(session: dict = Depends(get_session)):
         "ollama":           {"has": True, "url": ollama},   # always "configured" — just needs local Ollama running
         "claude_web":       {"has": bool(cfg.get("claude_web_session")),    "masked": mask_session(cfg.get("claude_web_session"))},
         "chatgpt_web":      {"has": bool(cfg.get("chatgpt_web_token")),     "masked": mask_session(cfg.get("chatgpt_web_token"))},
-        "default_provider": cfg.get("default_ai_provider") or "claude",
+        "default_provider": default_provider,
         "default_model":    cfg.get("default_ai_model")    or "",
+        "provider_catalog": provider_catalog,
+        "configured_providers": configured_providers,
     }
 
 

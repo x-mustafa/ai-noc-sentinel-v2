@@ -1,0 +1,38 @@
+[Unit]
+Description=NOC Sentinel v2 - Workflow Worker
+Documentation=https://github.com/x-mustafa/ai-noc-sentinel-v2
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=exec
+User=nocsentinel
+Group=nocsentinel
+WorkingDirectory=/opt/noc-sentinel
+
+EnvironmentFile=/opt/noc-sentinel/.env
+
+# Skip license check in case your deploy uses PyArmor instead
+# Environment=NOC_SKIP_LICENSE=1
+
+ExecStart=/opt/noc-sentinel/venv/bin/python tools/run_worker.py
+
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=noc-sentinel-worker
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/noc-sentinel
+
+LimitNOFILE=65536
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target

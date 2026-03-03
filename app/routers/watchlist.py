@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from typing import Optional
 from app.deps import get_session, require_operator
 from app.database import fetch_all, fetch_one, execute
+from app.services.ai_stream import extract_text_chunk
+from app.services.ai_provider import resolve_runtime_ai
 
 router = APIRouter()
 
@@ -143,16 +145,19 @@ async def _scan_entry(entry: dict) -> dict:
     try:
         cfg = await db_fetch("SELECT * FROM zabbix_config LIMIT 1")
         if cfg:
+            provider, model, api_key = resolve_runtime_ai(cfg)
+            if not api_key:
+                raise RuntimeError("No AI provider credentials configured")
             from app.services.employee_prompt import build_employee_system_prompt
             sys_prompt = await build_employee_system_prompt(emp_id)
             chunks = []
             async for chunk in stream_ai(
-                cfg.get("provider", "claude"), cfg.get("claude_key", ""),
-                cfg.get("model", "claude-haiku-4-5-20251001"),
+                provider, api_key, model,
                 sys_prompt, prompt,
             ):
-                if chunk.get("type") == "text":
-                    chunks.append(chunk["text"])
+                text = extract_text_chunk(chunk)
+                if text:
+                    chunks.append(text)
             finding_text = "".join(chunks).strip()
             if "critical" in finding_text.lower():
                 severity = "critical"

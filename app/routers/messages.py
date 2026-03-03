@@ -13,6 +13,7 @@ from typing import Optional
 
 from app.deps import get_session, require_operator
 from app.database import fetch_one, fetch_all, execute
+from app.services.ai_provider import resolve_runtime_ai
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -175,31 +176,14 @@ async def _ai_reply_to_message(msg_id: int, msg: dict) -> None:
             (msg_id,),
         )
 
-        cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-        provider = cfg.get("default_ai_provider") or "claude"
-        key_map  = {
-            "claude":     "claude_key",
-            "openai":     "openai_key",
-            "gemini":     "gemini_key",
-            "grok":       "grok_key",
-            "openrouter": "openrouter_key",
-        }
-        api_key = cfg.get(key_map.get(provider, "claude_key"), "")
+        cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+        provider, model, api_key = resolve_runtime_ai(cfg)
         if not api_key:
             await execute(
                 "UPDATE employee_messages SET status='pending' WHERE id=%s",
                 (msg_id,),
             )
             return
-
-        model_defaults = {
-            "claude":     "claude-haiku-4-5-20251001",
-            "openai":     "gpt-4o-mini",
-            "gemini":     "gemini-2.0-flash",
-            "grok":       "grok-2-latest",
-            "openrouter": "anthropic/claude-haiku-4-5",
-        }
-        model = cfg.get("default_ai_model") or model_defaults.get(provider, "claude-haiku-4-5-20251001")
 
         persona = await build_employee_system_prompt(to_emp)
         ops_ctx = await get_full_operational_context(to_emp)

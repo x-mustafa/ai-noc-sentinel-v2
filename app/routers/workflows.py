@@ -4,9 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, validator
 from typing import Optional, Literal
 
+from app.config import settings
 from app.deps import get_session, require_admin, require_operator
 from app.database import fetch_all, fetch_one, execute
-from app.services.workflow_engine import trigger_workflow_manually, reload_scheduled_workflows
+from app.services.workflow_engine import (
+    approve_pending_workflow_action,
+    reject_pending_workflow_action,
+    reload_scheduled_workflows,
+    trigger_workflow_manually,
+)
 
 router = APIRouter()
 
@@ -27,6 +33,7 @@ class WorkflowBody(BaseModel):
     )
     action_type:     str = "log"   # JSON array string for multi-action e.g. '["log","email"]'
     action_config:   Optional[str] = None
+    risk_tier:       Literal["observe", "safe_auto", "approval_required", "forbidden"] = "safe_auto"
     is_active:       bool = True
 
     @validator("employee_id")
@@ -34,6 +41,10 @@ class WorkflowBody(BaseModel):
         if v not in _VALID_EMPLOYEES:
             raise ValueError(f"employee_id must be one of: {', '.join(sorted(_VALID_EMPLOYEES))}")
         return v
+
+
+class ApprovalDecisionBody(BaseModel):
+    note: Optional[str] = Field(None, max_length=1000)
 
 
 @router.get("")
@@ -50,18 +61,71 @@ async def create_workflow(body: WorkflowBody, session: dict = Depends(require_op
         raise HTTPException(400, "Name required")
     wf_id = await execute(
         "INSERT INTO workflows (name, description, trigger_type, trigger_config, "
-        "employee_id, prompt_template, action_type, action_config, is_active) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "employee_id, prompt_template, action_type, action_config, risk_tier, is_active) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (body.name, body.description, body.trigger_type,
          body.trigger_config, body.employee_id,
          body.prompt_template, body.action_type,
-         body.action_config, int(body.is_active)),
+         body.action_config, body.risk_tier, int(body.is_active)),
     )
     await reload_scheduled_workflows()
     return {"ok": True, "id": wf_id}
 
 
-@router.get("/{wf_id}")
+@router.get("/approvals")
+async def list_approvals(
+    status: str = "pending",
+    session: dict = Depends(require_operator),
+):
+    rows = await fetch_all(
+        "SELECT wa.id, wa.workflow_id, wa.workflow_run_id, wa.effective_risk_tier, wa.action_plan, "
+        "wa.status, wa.requested_by, wa.decision_note, wa.decided_by, wa.requested_at, wa.decided_at, "
+        "w.name AS workflow_name "
+        "FROM workflow_approvals wa "
+        "JOIN workflows w ON w.id=wa.workflow_id "
+        "WHERE wa.status=%s "
+        "ORDER BY wa.requested_at DESC LIMIT 100",
+        (status,),
+    )
+    for row in rows:
+        row["requested_at"] = str(row.get("requested_at", "") or "")
+        row["decided_at"] = str(row.get("decided_at", "") or "")
+    return rows
+
+
+@router.post("/approvals/{approval_id:int}/approve")
+async def approve_workflow_approval(
+    approval_id: int,
+    body: ApprovalDecisionBody,
+    session: dict = Depends(require_operator),
+):
+    try:
+        return await approve_pending_workflow_action(
+            approval_id,
+            session.get("username", "operator"),
+            body.note,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.post("/approvals/{approval_id:int}/reject")
+async def reject_workflow_approval(
+    approval_id: int,
+    body: ApprovalDecisionBody,
+    session: dict = Depends(require_operator),
+):
+    try:
+        return await reject_pending_workflow_action(
+            approval_id,
+            session.get("username", "operator"),
+            body.note,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.get("/{wf_id:int}")
 async def get_workflow(wf_id: int, session: dict = Depends(get_session)):
     row = await fetch_one("SELECT * FROM workflows WHERE id=%s", (wf_id,))
     if not row:
@@ -70,25 +134,25 @@ async def get_workflow(wf_id: int, session: dict = Depends(get_session)):
     return row
 
 
-@router.put("/{wf_id}")
+@router.put("/{wf_id:int}")
 async def update_workflow(wf_id: int, body: WorkflowBody, session: dict = Depends(require_operator)):
     row = await fetch_one("SELECT id FROM workflows WHERE id=%s", (wf_id,))
     if not row:
         raise HTTPException(404, "Not found")
     await execute(
         "UPDATE workflows SET name=%s, description=%s, trigger_type=%s, trigger_config=%s, "
-        "employee_id=%s, prompt_template=%s, action_type=%s, action_config=%s, is_active=%s "
+        "employee_id=%s, prompt_template=%s, action_type=%s, action_config=%s, risk_tier=%s, is_active=%s "
         "WHERE id=%s",
         (body.name, body.description, body.trigger_type,
          body.trigger_config, body.employee_id,
          body.prompt_template, body.action_type,
-         body.action_config, int(body.is_active), wf_id),
+         body.action_config, body.risk_tier, int(body.is_active), wf_id),
     )
     await reload_scheduled_workflows()
     return {"ok": True}
 
 
-@router.delete("/{wf_id}")
+@router.delete("/{wf_id:int}")
 async def delete_workflow(wf_id: int, session: dict = Depends(require_admin)):
     await execute("DELETE FROM workflow_runs WHERE workflow_id=%s", (wf_id,))
     await execute("DELETE FROM workflows WHERE id=%s", (wf_id,))
@@ -96,16 +160,16 @@ async def delete_workflow(wf_id: int, session: dict = Depends(require_admin)):
     return {"ok": True}
 
 
-@router.post("/{wf_id}/trigger")
+@router.post("/{wf_id:int}/trigger")
 async def manual_trigger(wf_id: int, session: dict = Depends(require_operator)):
     row = await fetch_one("SELECT id FROM workflows WHERE id=%s", (wf_id,))
     if not row:
         raise HTTPException(404, "Workflow not found")
-    result = await trigger_workflow_manually(wf_id)
+    result = await trigger_workflow_manually(wf_id, session.get("username", "system"))
     return result
 
 
-@router.get("/{wf_id}/runs")
+@router.get("/{wf_id:int}/runs")
 async def get_runs(wf_id: int, session: dict = Depends(get_session)):
     rows = await fetch_all(
         "SELECT id, trigger_data, ai_response, action_result, status, "
@@ -126,7 +190,7 @@ class OutcomeBody(BaseModel):
     outcome_note: Optional[str] = Field(None, max_length=1000)
 
 
-@router.post("/{wf_id}/runs/{run_id}/outcome")
+@router.post("/{wf_id:int}/runs/{run_id:int}/outcome")
 async def mark_run_outcome(
     wf_id:  int,
     run_id: int,
@@ -193,7 +257,7 @@ async def test_webhook(body: TestWebhookBody, session: dict = Depends(require_op
     if (parsed.hostname or "").lower() in _BLOCKED_HOSTS:
         raise HTTPException(400, "Internal/loopback addresses not allowed for webhook test")
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(verify=settings.outbound_tls_verify, timeout=10) as client:
             resp = await client.post(body.url, json=body.payload,
                                      headers={"Content-Type": "application/json",
                                               "X-Source": "NOC-Sentinel-Test"})

@@ -183,7 +183,7 @@ input,select,textarea{font-family:'JetBrains Mono',monospace}
 .logo-text{font-size:13px;font-weight:700;color:#fff;letter-spacing:1.5px}
 .logo-sub{font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:1.5px;margin-top:1px}
 
-nav{flex:1;padding:8px 0;overflow:hidden}
+nav{flex:1;padding:8px 0;overflow-y:auto;overflow-x:hidden;min-height:0}
 .nav-item{
   display:flex;align-items:center;gap:11px;padding:10px 15px;
   cursor:pointer;transition:all 0.18s var(--easing);border-left:2px solid transparent;
@@ -814,6 +814,7 @@ table.alarms-tbl{width:100%;border-collapse:collapse}
 .map-section-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 13px 5px;font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px}
 .map-import-btn{background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.25);border-radius:4px;color:var(--green);font-size:9px;font-family:'JetBrains Mono',monospace;padding:2px 7px;cursor:pointer;transition:all 0.15s}
 .map-import-btn:hover{background:rgba(0,230,118,0.2);border-color:rgba(0,230,118,0.5)}
+#map-list{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto}
 .map-list-item{display:flex;align-items:center;gap:8px;padding:7px 13px;cursor:pointer;font-size:11px;color:var(--muted);transition:all 0.15s;border-left:2px solid transparent}
 .map-list-item:hover{background:rgba(255,255,255,0.04);color:#b8cce4}
 .map-list-item.active-map{border-left-color:var(--green);color:var(--green);background:rgba(0,230,118,0.05)}
@@ -1761,20 +1762,22 @@ select.form-inp option{background:#0d1628}
 
     <!-- EXTERNAL DASHBOARDS -->
     <div class="ext-section-hdr">Dashboards</div>
-    <a class="nav-item ext-grafana" href="https://grafana.tabadul.iq/dashboards" target="_blank" rel="noopener noreferrer">
+    <div class="nav-item ext-grafana" data-page="observability-grafana" onclick="openDashboardPage('grafana')">
       <span class="nav-icon">
         <img src="https://upload.wikimedia.org/wikipedia/commons/a/a1/Grafana_logo.svg" width="16" height="16" style="object-fit:contain;flex-shrink:0" alt="Grafana">
       </span>
-      <span class="nav-label">Grafana Dashboards</span>
-      <i data-lucide="external-link" class="ext-out-icon"></i>
-    </a>
-    <a class="nav-item ext-zabbix" href="https://zabbix.tabadul.iq/zabbix.php?action=dashboard.view&dashboardid=1&from=now-15m&to=now" target="_blank" rel="noopener noreferrer">
+      <span class="nav-label">Grafana Live</span>
+    </div>
+    <div class="nav-item ext-zabbix" data-page="observability-zabbix" onclick="openDashboardPage('zabbix')">
       <span class="nav-icon">
         <img src="https://images.icon-icons.com/2699/PNG/512/zabbix_logo_icon_167937.png" width="16" height="16" style="object-fit:contain;flex-shrink:0" alt="Zabbix">
       </span>
-      <span class="nav-label">Zabbix Dashboard</span>
-      <i data-lucide="external-link" class="ext-out-icon"></i>
-    </a>
+      <span class="nav-label">Zabbix Live</span>
+    </div>
+    <div class="nav-item" data-page="observability-kuma" onclick="openDashboardPage('kuma')">
+      <span class="nav-icon"><i data-lucide="activity" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Kuma Status</span>
+    </div>
 
     <!-- MAP LIST -->
     <div class="map-section">
@@ -1812,7 +1815,7 @@ select.form-inp option{background:#0d1628}
 
   <!-- TOP BAR -->
   <div id="topbar">
-    <div class="topbar-title" id="page-title">Network Map</div>
+    <div class="topbar-title" id="page-title">Maps</div>
     <div class="stat-chip"><div class="stat-dot" style="background:#3498db"></div><span class="stat-num" id="sc-total">—</span><span class="stat-lbl">hosts</span></div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--green)"></div><span class="stat-num" id="sc-ok">—</span><span class="stat-lbl">ok</span></div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--red)"></div><span class="stat-num" id="sc-prob">—</span><span class="stat-lbl">problems</span></div>
@@ -1999,6 +2002,57 @@ select.form-inp option{background:#0d1628}
           <button class="btn btn-primary" onclick="saveZabbixConfig()">Save</button>
         </div>
         <div id="cfg-result" style="margin-top:10px;font-size:11px;font-family:'JetBrains Mono',monospace"></div>
+      </div>
+
+      <div class="settings-card" id="obs-settings-card">
+        <h3>Observability Access</h3>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Store the default Grafana and Zabbix web credentials here. The backend uses them for smarter dashboard checks and autonomous patrol workflows.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="ef">
+            <label>Grafana URL</label>
+            <input type="url" id="obs-cfg-grafana-url" placeholder="https://grafana.tabadul.iq/dashboards" />
+          </div>
+          <div class="ef">
+            <label>Grafana Username</label>
+            <input type="text" id="obs-cfg-grafana-user" placeholder="mraad" />
+          </div>
+          <div class="ef">
+            <label>Grafana Password</label>
+            <input type="password" id="obs-cfg-grafana-pass" placeholder="Stored only when you change it" autocomplete="new-password" />
+          </div>
+          <div class="ef">
+            <label>Zabbix Web URL</label>
+            <input type="url" id="obs-cfg-zabbix-url" placeholder="https://zabbix.tabadul.iq/zabbix.php?action=dashboard.view" />
+          </div>
+          <div class="ef">
+            <label>Zabbix Username</label>
+            <input type="text" id="obs-cfg-zabbix-user" placeholder="mraad" />
+          </div>
+          <div class="ef">
+            <label>Zabbix Password</label>
+            <input type="password" id="obs-cfg-zabbix-pass" placeholder="Stored only when you change it" autocomplete="new-password" />
+          </div>
+          <div class="ef">
+            <label>Kuma URL</label>
+            <input type="url" id="obs-cfg-kuma-url" placeholder="http://127.0.0.1:3000" />
+          </div>
+          <div class="ef">
+            <label>AI Patrol Interval (minutes)</label>
+            <input type="number" id="obs-cfg-monitor-mins" value="5" min="1" max="60" />
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <label class="wf-toggle-wrap">
+            <input type="checkbox" id="obs-cfg-auto-monitor">
+            <span class="wf-toggle"></span>
+          </label>
+          <span style="color:var(--text);font-size:12px">Keep AI employees patrolling these dashboards automatically</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="saveObservabilityConfig()">Save Access</button>
+          <button class="btn btn-ghost" onclick="startAutonomousMonitoring()">Start AI Patrol Now</button>
+        </div>
+        <div id="obs-cfg-result" style="margin-top:10px;font-size:11px;font-family:'JetBrains Mono',monospace"></div>
       </div>
 
       <!-- AI Providers -->
@@ -2559,6 +2613,9 @@ select.form-inp option{background:#0d1628}
             <button class="ofc-btn ofc-btn-assign" onclick="openCreateWorkflowModal()">+ New Workflow</button>
           </div>
         </div>
+        <div id="workflows-approval-panel" style="margin-bottom:14px;border:1px solid var(--border);border-radius:12px;background:rgba(11,17,34,0.72);padding:14px 16px;color:var(--muted);font-size:11px">
+          Loading approval queue...
+        </div>
         <div id="workflows-grid" class="workflows-grid">
           <div style="color:var(--muted);font-size:12px;padding:32px;text-align:center">Loading workflows...</div>
         </div>
@@ -2932,6 +2989,9 @@ select.form-inp option{background:#0d1628}
       <button class="tb-btn" onclick="loadRunbooks()" style="margin-left:0">↺ Refresh</button>
       <button class="btn btn-primary" onclick="openRbModal(null)" style="font-size:11px;padding:5px 14px">+ New Runbook</button>
     </div>
+    <div id="rb-coverage-panel" style="margin:14px 18px 0;border:1px solid var(--border);border-radius:12px;background:rgba(11,17,34,0.72);padding:14px 16px;color:var(--muted);font-size:11px">
+      Loading coverage...
+    </div>
     <div class="rb-grid" id="rb-grid">
       <div class="rb-empty">Loading runbooks…</div>
     </div>
@@ -2958,6 +3018,13 @@ select.form-inp option{background:#0d1628}
         <div class="ef" style="margin:0"><label>Status</label>
           <select id="rb-status" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%">
             <option value="draft">Draft</option><option value="approved">Approved</option>
+          </select>
+        </div>
+        <div class="ef" style="margin:0"><label>Validation</label>
+          <select id="rb-validation-status" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%">
+            <option value="untested">Untested</option>
+            <option value="candidate">Candidate</option>
+            <option value="validated">Validated</option>
           </select>
         </div>
         <div class="ef" style="margin:0"><label>Trigger Keywords (comma-separated)</label><input type="text" id="rb-keywords" placeholder="cpu, high load, process" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:#e0eaff;font-size:12px;outline:none;width:100%"></div>
@@ -3047,13 +3114,14 @@ select.form-inp option{background:#0d1628}
       <button class="btn btn-primary" onclick="openCreateWorkflowModal()" style="font-size:11px;padding:5px 14px">+ New Workflow</button>
     </div>
     <div class="wfs-body">
+      <div id="wfs-approval-panel" style="margin-bottom:14px;border:1px solid var(--border);border-radius:12px;background:rgba(11,17,34,0.72);padding:14px 16px;color:var(--muted);font-size:11px">
+        Loading approval queue...
+      </div>
       <div class="workflows-grid" id="wfs-grid">
         <div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--muted);font-size:12px">Loading workflows…</div>
       </div>
     </div>
   </div>
-
-</div><!-- /main-area -->
 
 <!-- ══ NOC TV MODE OVERLAY ══ -->
 <div id="tv-mode-overlay">
@@ -3405,6 +3473,52 @@ select.form-inp option{background:#0d1628}
   </div>
 </div>
 
+<!-- ══ OBSERVABILITY HUB PAGE ══ -->
+<div class="page" id="page-observability">
+  <div style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:rgba(6,10,20,0.72);flex-wrap:wrap">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="filter-btn" id="obs-tab-grafana" onclick="obsSelectTarget('grafana')">Grafana</button>
+        <button class="filter-btn" id="obs-tab-zabbix" onclick="obsSelectTarget('zabbix')">Zabbix</button>
+        <button class="filter-btn" id="obs-tab-kuma" onclick="obsSelectTarget('kuma')">Kuma</button>
+      </div>
+      <div style="flex:1;min-width:240px">
+        <input id="obs-url" type="text" placeholder="Dashboard URL" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;color:#e0eaff;font-size:11px;outline:none;font-family:'JetBrains Mono',monospace">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="tb-btn" id="obs-access-btn" onclick="openObservabilityAccessSettings()" style="margin-left:0">Access</button>
+        <button class="tb-btn" onclick="obsSaveUrl()" style="margin-left:0">Save URL</button>
+        <button class="tb-btn" onclick="obsLoadFrame(true)" style="margin-left:0">Reload</button>
+        <button class="btn btn-primary" onclick="obsOpenExternal()" style="font-size:11px;padding:5px 14px">Open</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:14px;padding:14px 18px 18px;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
+        <div id="obs-pulse" style="border:1px solid var(--border);border-radius:12px;background:rgba(11,17,34,0.8);padding:14px;color:var(--muted);font-size:11px">
+          Loading operational context...
+        </div>
+        <div style="border:1px solid var(--border);border-radius:12px;background:rgba(11,17,34,0.8);padding:14px;color:var(--muted);font-size:11px;line-height:1.6">
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">Smart Embed Notes</div>
+          <div id="obs-status">Waiting for a dashboard target.</div>
+          <div id="obs-hint" style="margin-top:8px">If a panel stays blank, the upstream service is probably blocking embeds. Use <b style="color:#fff">Open</b> or enable embedding on the upstream service.</div>
+        </div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:14px;overflow:hidden;background:rgba(8,12,24,0.9);display:flex;flex-direction:column;min-width:0;min-height:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);font-size:11px;color:var(--muted)">
+          <span id="obs-frame-title">Observability Workspace</span>
+          <span id="obs-frame-meta">In-app view</span>
+        </div>
+        <div style="position:relative;flex:1;min-height:0;background:#08111f">
+          <iframe id="obs-frame" title="Observability Workspace" style="width:100%;height:100%;border:0;background:#08111f" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+          <div id="obs-frame-overlay" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;padding:28px;background:linear-gradient(180deg,rgba(8,12,24,0.94),rgba(8,12,24,0.98));z-index:2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main-area -->
+
 <!-- Site Modal -->
 <div id="site-modal">
   <div class="site-modal-box">
@@ -3688,6 +3802,18 @@ select.form-inp option{background:#0d1628}
     </div>
     <input type="hidden" id="wf-f-employee" value="aria">
 
+    <div style="margin-top:16px;padding:12px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;background:rgba(255,255,255,0.02)">
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px">Smart Rule Draft</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:8px">
+        Describe the abnormal signal and the outcome you want. The builder will turn it into a patrol-ready prompt that only acts when the AI marks the situation as abnormal.
+      </div>
+      <input id="wf-f-quick-condition" class="form-inp" placeholder="When you see an abnormal signal such as repeated packet loss, dashboard failures, or unusual alarm bursts..." style="width:100%;margin-bottom:8px">
+      <textarea id="wf-f-quick-actions" class="form-inp" rows="2" placeholder="Then summarize the impact, recommend the immediate fix, and create an incident for the right engineer." style="width:100%"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-ghost" onclick="wfGenerateSmartDraft()" style="padding:6px 12px;font-size:11px">Generate Smart Draft</button>
+      </div>
+    </div>
+
     <!-- Step 4: Task prompt -->
     <div class="wf-step-label" style="margin-top:16px">4 · What should they do?</div>
     <div class="wf-prompt-templates">
@@ -3711,6 +3837,11 @@ select.form-inp option{background:#0d1628}
         <div class="wf-ac-icon">🚨</div>
         <div class="wf-ac-title">Save to Incidents</div>
         <div class="wf-ac-desc">Create incident record</div>
+      </div>
+      <div class="wf-ac" onclick="wfToggleAction('escalation')" id="wac-escalation">
+        <div class="wf-ac-icon">🚩</div>
+        <div class="wf-ac-title">Escalation Queue</div>
+        <div class="wf-ac-desc">Create follow-up ownership</div>
       </div>
       <div class="wf-ac" onclick="wfToggleAction('webhook')" id="wac-webhook">
         <div class="wf-ac-icon">🔗</div>
@@ -3858,7 +3989,7 @@ select.form-inp option{background:#0d1628}
     <!-- Teams Chat (Graph API) action config -->
     <div id="wf-action-teams_chat" style="display:none;margin-top:10px">
       <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
-        <b style="color:#7c3aed">Teams Group Chat:</b> Send directly to a Teams group chat via Graph API. Requires <code style="color:#a78bfa;font-size:9px">Chat.ReadWrite.All</code> permission.
+        <b style="color:#7c3aed">Teams Chat:</b> Send directly to a Teams chat via Graph API. Requires <code style="color:#a78bfa;font-size:9px">Chat.ReadWrite.All</code> permission.
       </div>
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
         <div>
@@ -3874,7 +4005,7 @@ select.form-inp option{background:#0d1628}
           📋 Load Chats
         </button>
       </div>
-      <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Target Group Chat</div>
+      <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Target Chat</div>
       <select id="wf-f-teams-chat-id" class="form-inp" style="width:100%">
         <option value="">— click Load Chats first —</option>
       </select>
@@ -3970,6 +4101,52 @@ select.form-inp option{background:#0d1628}
           </select>
         </div>
       </div>
+    </div>
+
+    <div id="wf-action-escalation" style="display:none;margin-top:10px">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+        <b style="color:#fbbf24">Escalation Queue:</b> Opens an escalation record with automated follow-up timers. If this workflow also creates an incident, the escalation will link to that new incident automatically.
+      </div>
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 0.8fr 0.8fr;gap:8px">
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Escalate To</div>
+          <input id="wf-f-esc-to" class="form-inp" placeholder="Duty Manager" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Channel</div>
+          <select id="wf-f-esc-channel" class="form-inp" style="width:100%">
+            <option value="teams">Teams</option>
+            <option value="email">Email</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="phone">Phone</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">First Follow-up</div>
+          <input id="wf-f-esc-followup" class="form-inp" type="number" min="5" max="240" value="30" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Max Follow-ups</div>
+          <input id="wf-f-esc-max" class="form-inp" type="number" min="1" max="10" value="3" style="width:100%">
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Escalation Note Template (optional)</div>
+        <input id="wf-f-esc-message" class="form-inp" placeholder="Workflow {workflow_name}: {ai_response}" style="width:100%">
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding:12px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;background:rgba(255,255,255,0.02)">
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">Execution Risk Tier</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:8px">
+        Choose how much authority this workflow has. Higher-risk actions should stop for human approval before execution.
+      </div>
+      <select id="wf-f-risk-tier" class="form-inp" style="width:100%">
+        <option value="observe">Observe only (log and analyze)</option>
+        <option value="safe_auto" selected>Safe auto-action</option>
+        <option value="approval_required">Approval required before action</option>
+        <option value="forbidden">Forbidden (block action execution)</option>
+      </select>
     </div>
 
     <!-- Enable toggle -->
@@ -5360,6 +5537,7 @@ async function loadSettingsData(){
     document.getElementById('cfg-token').value=cfg.token_masked||'';
     document.getElementById('cfg-refresh').value=cfg.refresh||30;
   }
+  await loadObservabilityConfig();
   // Load Claude key status
   const ck=await api('/api/import/key');
   const ckStatus=document.getElementById('claude-key-status');
@@ -5384,6 +5562,83 @@ async function loadSettingsData(){
   loadAutoIncSettings();
   // Load employee instruction status for settings card
   loadSettingsInstrStatus();
+}
+
+let _obsServerConfig = null;
+
+function obsConfiguredDefaults(){
+  const server = _obsServerConfig || {};
+  return {
+    grafana: server.grafana?.url || 'https://grafana.tabadul.iq/dashboards',
+    zabbix: server.zabbix?.url || 'https://zabbix.tabadul.iq/zabbix.php?action=dashboard.view&dashboardid=1&from=now-15m&to=now',
+    kuma: server.kuma?.url || '',
+  };
+}
+
+async function loadObservabilityConfig(){
+  const cfg = await api('/api/observability/config');
+  if(!cfg || isApiError(cfg)) return;
+  _obsServerConfig = cfg;
+  document.getElementById('obs-cfg-grafana-url').value = cfg.grafana?.url || '';
+  document.getElementById('obs-cfg-grafana-user').value = cfg.grafana?.username || '';
+  document.getElementById('obs-cfg-grafana-pass').value = '';
+  document.getElementById('obs-cfg-zabbix-url').value = cfg.zabbix?.url || '';
+  document.getElementById('obs-cfg-zabbix-user').value = cfg.zabbix?.username || '';
+  document.getElementById('obs-cfg-zabbix-pass').value = '';
+  document.getElementById('obs-cfg-kuma-url').value = cfg.kuma?.url || '';
+  document.getElementById('obs-cfg-auto-monitor').checked = !!cfg.auto_monitor_enabled;
+  document.getElementById('obs-cfg-monitor-mins').value = cfg.monitor_interval_minutes || 5;
+  const status = document.getElementById('obs-cfg-result');
+  if(status){
+    const g = cfg.grafana?.has_password ? 'Grafana password saved' : 'Grafana password not set';
+    const z = cfg.zabbix?.has_password ? 'Zabbix password saved' : 'Zabbix password not set';
+    status.innerHTML = `<span style="color:var(--muted)">${g} · ${z}</span>`;
+  }
+}
+
+async function saveObservabilityConfig(){
+  const body = {
+    grafana_url: document.getElementById('obs-cfg-grafana-url').value.trim(),
+    grafana_username: document.getElementById('obs-cfg-grafana-user').value.trim(),
+    zabbix_web_url: document.getElementById('obs-cfg-zabbix-url').value.trim(),
+    zabbix_web_username: document.getElementById('obs-cfg-zabbix-user').value.trim(),
+    kuma_url: document.getElementById('obs-cfg-kuma-url').value.trim(),
+    auto_monitor_enabled: document.getElementById('obs-cfg-auto-monitor').checked,
+    monitor_interval_minutes: parseInt(document.getElementById('obs-cfg-monitor-mins').value, 10) || 5,
+  };
+  const grafanaPass = document.getElementById('obs-cfg-grafana-pass').value;
+  const zabbixPass = document.getElementById('obs-cfg-zabbix-pass').value;
+  if(grafanaPass) body.grafana_password = grafanaPass;
+  if(zabbixPass) body.zabbix_web_password = zabbixPass;
+  const status = document.getElementById('obs-cfg-result');
+  if(status) status.innerHTML = '<span style="color:var(--muted)">Saving observability access...</span>';
+  const r = await api('/api/observability/config', {method:'PUT', body:JSON.stringify(body)});
+  if(isApiError(r) || r?.ok === false){
+    if(status) status.innerHTML = `<span style="color:var(--red)">Error: ${esc(apiMessage(r, 'Save failed'))}</span>`;
+    return;
+  }
+  document.getElementById('obs-cfg-grafana-pass').value = '';
+  document.getElementById('obs-cfg-zabbix-pass').value = '';
+  await loadObservabilityConfig();
+  if(status){
+    const patrolMsg = r?.started_workflows?.length
+      ? ` Saved. ${r.started_workflows.length} AI patrol workflow(s) refreshed.`
+      : ' Saved.';
+    status.innerHTML = `<span style="color:var(--green)">OK.${patrolMsg}</span>`;
+  }
+}
+
+async function startAutonomousMonitoring(){
+  const status = document.getElementById('obs-cfg-result');
+  if(status) status.innerHTML = '<span style="color:var(--muted)">Starting AI patrol workflows...</span>';
+  const r = await api('/api/observability/start-monitoring', {method:'POST', body:'{}'});
+  if(isApiError(r) || r?.ok === false){
+    if(status) status.innerHTML = `<span style="color:var(--red)">Error: ${esc(apiMessage(r, 'Unable to start monitoring'))}</span>`;
+    return;
+  }
+  if(status) status.innerHTML = `<span style="color:var(--green)">OK. ${r.workflows?.length || 0} autonomous patrol workflow(s) started.</span>`;
+  await loadWorkflows();
+  await loadWfs();
 }
 
 async function loadSettingsInstrStatus() {
@@ -5799,12 +6054,22 @@ async function doCreateMap(){
 // ═══════════════════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════════════════
-const PAGE_TITLES={map:'Network Map',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office',incidents:'Incidents',runbooks:'Runbooks',sla:'SLA Dashboard',workflows:'Workflows',watchlist:'Proactive Watchlist',escalations:'Escalations',changes:'Change Calendar','alert-rules':'Alert Rules Engine',sites:'Zabbix Sites'};
+const PAGE_TITLES={map:'Maps',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office',incidents:'Incidents',runbooks:'Runbooks',sla:'SLA Dashboard',workflows:'Workflows',watchlist:'Proactive Watchlist',escalations:'Escalations',changes:'Change Calendar','alert-rules':'Alert Rules Engine',sites:'Zabbix Sites','observability-grafana':'Grafana Live','observability-zabbix':'Zabbix Live','observability-kuma':'Kuma Status',observability:'Observability Hub'};
+const PAGE_ALIASES={'observability-grafana':'observability','observability-zabbix':'observability','observability-kuma':'observability'};
+function openDashboardPage(target){
+  const pageKey = `observability-${target}`;
+  navigate(pageKey);
+}
 function navigate(page){
+  const basePage = PAGE_ALIASES[page] || page;
+  if(basePage !== 'observability' && _obsRefreshTimer){
+    clearInterval(_obsRefreshTimer);
+    _obsRefreshTimer = null;
+  }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById('page-'+page).classList.add('active');
+  document.getElementById('page-'+basePage).classList.add('active');
   document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.classList.toggle('active',n.dataset.page===page));
-  document.getElementById('page-title').textContent=PAGE_TITLES[page]||page;
+  document.getElementById('page-title').textContent=PAGE_TITLES[page]||PAGE_TITLES[basePage]||page;
   if(page==='alarms')    refreshAlarms();
   if(page==='hosts')     renderHosts();
   if(page==='settings')  loadSettingsData();
@@ -5821,6 +6086,7 @@ function navigate(page){
   if(page==='changes')       loadChanges();
   if(page==='alert-rules')   loadAlertRules();
   if(page==='sites')         loadSites();
+  if(basePage==='observability') loadObservability(page);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5832,6 +6098,374 @@ async function api(path,opts={}){
     if(r.status===401){showLogin();return null;}
     return r.json();
   }catch(e){return null;}
+}
+
+function apiMessage(data, fallback = 'Request failed') {
+  if (!data) return fallback;
+  if (typeof data === 'string') return data;
+  if (Array.isArray(data) && data[0] && typeof data[0] === 'object' && data[0].error) return data[0].error;
+  if (typeof data === 'object') return data.detail || data.error || fallback;
+  return fallback;
+}
+
+function isApiError(data) {
+  return !!(data && !Array.isArray(data) && typeof data === 'object' && (data.detail || data.error));
+}
+
+function wfRiskTierMeta(tier) {
+  const map = {
+    observe: { label: 'Observe', color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
+    safe_auto: { label: 'Safe Auto', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' },
+    approval_required: { label: 'Needs Approval', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+    forbidden: { label: 'Blocked', color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
+  };
+  return map[tier] || map.safe_auto;
+}
+
+function showToast(message, tone = 'info') {
+  let host = document.getElementById('toast-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'toast-host';
+    host.style.position = 'fixed';
+    host.style.right = '18px';
+    host.style.bottom = '18px';
+    host.style.zIndex = '2000';
+    host.style.display = 'flex';
+    host.style.flexDirection = 'column';
+    host.style.gap = '8px';
+    host.style.maxWidth = '360px';
+    document.body.appendChild(host);
+  }
+  const palette = {
+    info: ['#94a3b8', 'rgba(15,23,42,0.95)'],
+    success: ['#4ade80', 'rgba(6,22,14,0.96)'],
+    warn: ['#fbbf24', 'rgba(28,20,4,0.96)'],
+    error: ['#f87171', 'rgba(34,8,8,0.96)'],
+  };
+  const [borderColor, bgColor] = palette[tone] || palette.info;
+  const toast = document.createElement('div');
+  toast.textContent = message || '';
+  toast.style.border = `1px solid ${borderColor}66`;
+  toast.style.background = bgColor;
+  toast.style.color = '#e5eefc';
+  toast.style.padding = '10px 12px';
+  toast.style.borderRadius = '10px';
+  toast.style.fontSize = '11px';
+  toast.style.lineHeight = '1.5';
+  toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.28)';
+  toast.style.opacity = '0';
+  toast.style.transform = 'translateY(8px)';
+  toast.style.transition = 'opacity 0.18s ease, transform 0.18s ease';
+  host.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+    setTimeout(() => toast.remove(), 180);
+  }, 2600);
+}
+
+let _obsCurrentTarget = 'grafana';
+let _obsRefreshTimer = null;
+
+function obsDefaults(){
+  return obsConfiguredDefaults();
+}
+
+function obsReadUrls(){
+  try{
+    const stored = JSON.parse(localStorage.getItem('obsUrls') || '{}');
+    return {...obsDefaults(), ...stored};
+  }catch(_){
+    return obsDefaults();
+  }
+}
+
+function obsPersistUrls(urls){
+  localStorage.setItem('obsUrls', JSON.stringify(urls));
+}
+
+function obsGetUrl(target){
+  const urls = obsReadUrls();
+  return urls[target] || obsDefaults()[target] || '';
+}
+
+function obsSetStatus(message, meta=''){
+  const status = document.getElementById('obs-status');
+  const frameMeta = document.getElementById('obs-frame-meta');
+  if(status) status.textContent = message;
+  if(frameMeta) frameMeta.textContent = meta || 'In-app view';
+}
+
+function obsHideFrameOverlay(){
+  const overlay = document.getElementById('obs-frame-overlay');
+  const frame = document.getElementById('obs-frame');
+  if(overlay) overlay.style.display = 'none';
+  if(frame) frame.style.display = '';
+}
+
+function obsShowFrameOverlay(title, detail, tone='warn'){
+  const overlay = document.getElementById('obs-frame-overlay');
+  const frame = document.getElementById('obs-frame');
+  if(!overlay || !frame) return;
+  const accent = tone === 'error' ? '#f87171' : tone === 'success' ? '#4ade80' : '#fbbf24';
+  frame.style.display = 'none';
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div style="max-width:540px;width:100%;border:1px solid ${accent}33;border-radius:16px;padding:22px 24px;background:rgba(8,12,24,0.96);box-shadow:0 18px 40px rgba(0,0,0,0.35)">
+      <div style="font-size:14px;font-weight:700;color:#fff">${esc(title)}</div>
+      <div style="margin-top:10px;color:#b8c9e0;font-size:11px;line-height:1.7">${esc(detail)}</div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="obsOpenExternal()" style="font-size:11px;padding:6px 14px">Open Externally</button>
+        <button class="tb-btn" onclick="obsLoadFrame(true)" style="margin-left:0">Retry Check</button>
+      </div>
+    </div>
+  `;
+}
+
+function obsSetHint(target){
+  const hint = document.getElementById('obs-hint');
+  if(!hint) return;
+  if(target === 'grafana'){
+    hint.innerHTML = 'Grafana may stay blank until <b style="color:#fff">allow_embedding = true</b> is enabled upstream. The URL field is saved locally, so you can point this to a shared dashboard or kiosk link.';
+  }else if(target === 'zabbix'){
+    hint.innerHTML = 'Zabbix web dashboards can block framing depending on upstream headers. If this view stays blank, use <b style="color:#fff">Open</b> or expose an embeddable dashboard route upstream.';
+  }else{
+    hint.innerHTML = 'Point Kuma at your real status page URL. NOC Sentinel will use that target for smart checks and can derive a recommended Kuma status from live alarms.';
+  }
+}
+
+function obsUrlWithBust(url){
+  try{
+    const parsed = new URL(url, window.location.origin);
+    parsed.searchParams.set('_noc_ts', Date.now().toString());
+    return parsed.toString();
+  }catch(_){
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}_noc_ts=${Date.now()}`;
+  }
+}
+
+function obsUpdateButtons(){
+  ['grafana','zabbix','kuma'].forEach(target => {
+    const btn = document.getElementById(`obs-tab-${target}`);
+    if(btn) btn.classList.toggle('active', target === _obsCurrentTarget);
+  });
+}
+
+function obsSelectTarget(target){
+  _obsCurrentTarget = target;
+  obsUpdateButtons();
+  const pageKey = `observability-${target}`;
+  const pageTitle = document.getElementById('page-title');
+  if(pageTitle) pageTitle.textContent = PAGE_TITLES[pageKey] || PAGE_TITLES.observability;
+  document.querySelectorAll('.nav-item[data-page]').forEach(n => n.classList.toggle('active', n.dataset.page === pageKey));
+  const titles = {grafana:'Grafana Live View', zabbix:'Zabbix Live View', kuma:'Kuma Status View'};
+  const titleEl = document.getElementById('obs-frame-title');
+  if(titleEl) titleEl.textContent = titles[target] || 'Observability Workspace';
+  const input = document.getElementById('obs-url');
+  if(input) input.value = obsGetUrl(target);
+  obsSetHint(target);
+  obsLoadFrame(false);
+  loadObservabilityPulse();
+}
+
+function obsSaveUrl(){
+  const input = document.getElementById('obs-url');
+  if(!input) return;
+  const url = input.value.trim();
+  if(!url){ showToast('Enter a URL first.', 'warn'); return; }
+  const urls = obsReadUrls();
+  urls[_obsCurrentTarget] = url;
+  obsPersistUrls(urls);
+  showToast('Dashboard URL saved for this browser.', 'success');
+  obsLoadFrame(true);
+}
+
+function obsOpenExternal(){
+  const input = document.getElementById('obs-url');
+  const url = (input?.value || '').trim() || obsGetUrl(_obsCurrentTarget);
+  if(!url){ showToast('No URL configured for this dashboard.', 'warn'); return; }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+async function obsLoadFrame(forceReload=false){
+  const frame = document.getElementById('obs-frame');
+  const input = document.getElementById('obs-url');
+  if(!frame || !input) return;
+  const rawUrl = input.value.trim() || obsGetUrl(_obsCurrentTarget);
+  if(!rawUrl){
+    frame.removeAttribute('src');
+    obsShowFrameOverlay('No Dashboard URL Configured', 'Enter a Grafana, Zabbix, or Kuma URL to use this workspace.', 'warn');
+    obsSetStatus('No dashboard URL configured.', 'No target');
+    return;
+  }
+  const urls = obsReadUrls();
+  urls[_obsCurrentTarget] = rawUrl;
+  obsPersistUrls(urls);
+  const url = forceReload ? obsUrlWithBust(rawUrl) : rawUrl;
+  let meta = rawUrl;
+  try{ meta = new URL(rawUrl, window.location.origin).host; }catch(_){}
+  obsSetStatus(`Checking ${_obsCurrentTarget} embed policy...`, meta);
+  const preflight = await api(`/api/observability/preflight?target=${encodeURIComponent(_obsCurrentTarget)}&url=${encodeURIComponent(rawUrl)}`);
+  if(preflight === null){
+    obsShowFrameOverlay(
+      'Dashboard Preflight Failed',
+      'The app could not verify the target URL. The upstream service may be unreachable from the server. Use Open Externally to continue.',
+      'error'
+    );
+    obsSetStatus('Could not preflight this dashboard target.', meta);
+    return;
+  }
+  if(isApiError(preflight) || preflight?.ok === false){
+    const preflightMsg = apiMessage(preflight, 'The dashboard URL is not allowed for in-app checks.');
+    if(String(preflightMsg).trim().toLowerCase() === 'not found'){
+      obsShowFrameOverlay(
+        'Observability Check API Not Loaded',
+        'The frontend has been updated, but the running backend process has not been restarted yet. Restart the NOC Sentinel backend so the new /api/observability/preflight route is available, then retry.',
+        'warn'
+      );
+      obsSetStatus('Observability preflight route is missing on the running backend.', meta);
+      return;
+    }
+    obsShowFrameOverlay(
+      'Dashboard Check Rejected',
+      preflightMsg,
+      'error'
+    );
+    obsSetStatus(preflightMsg || 'Dashboard check failed.', meta);
+    return;
+  }
+  if(preflight.requires_login){
+    const authNote = preflight.auth_used
+      ? ' Stored dashboard credentials were tried server-side, but the upstream still returned a login page.'
+      : '';
+    const loginDetail = preflight.frame_allowed === false && preflight.frame_reason
+      ? ` It is also sending frame policy headers (${preflight.frame_reason}) that prevent embedding.`
+      : '';
+    obsShowFrameOverlay(
+      `${_obsCurrentTarget.toUpperCase()} Requires Direct Login`,
+      `The upstream service is returning a login page instead of the dashboard. In an embedded context, browser auth cookies are often not sent cross-site. Open the dashboard directly, sign in there, and if the upstream allows framing you can try again.${authNote}${loginDetail}`,
+      'warn'
+    );
+    obsSetStatus(`${_obsCurrentTarget.toUpperCase()} is returning a login page.`, meta);
+    return;
+  }
+  if(preflight.client_frame_bust){
+    obsShowFrameOverlay(
+      `${_obsCurrentTarget.toUpperCase()} Uses Client-Side Frame Busting`,
+      'The upstream page contains client-side code that forces the dashboard out of embedded frames. Use Open Externally, or disable that anti-framing behavior upstream.',
+      'warn'
+    );
+    obsSetStatus(`${_obsCurrentTarget.toUpperCase()} contains client-side anti-frame logic.`, meta);
+    return;
+  }
+  if(preflight.frame_allowed === false){
+    const reason = preflight.frame_reason || 'The upstream service is blocking frame embedding.';
+    obsShowFrameOverlay(
+      `${_obsCurrentTarget.toUpperCase()} Blocks Embedding`,
+      `This target refuses to render inside an iframe. ${reason}. Use Open Externally, or change the upstream service headers if you want true in-app embedding.`,
+      'warn'
+    );
+    obsSetStatus(`${_obsCurrentTarget.toUpperCase()} is blocking embeds.`, meta);
+    obsSetHint(_obsCurrentTarget);
+    return;
+  }
+  obsHideFrameOverlay();
+  obsSetStatus(
+    preflight.frame_allowed === true
+      ? `${_obsCurrentTarget.toUpperCase()} looks embeddable. Loading live view...`
+      : `No blocking frame headers detected. Loading live view...`,
+    meta
+  );
+  frame.onload = () => obsSetStatus(`${_obsCurrentTarget.toUpperCase()} loaded inside the workspace.`, meta);
+  frame.src = url;
+}
+
+async function loadObservabilityPulse(){
+  const panel = document.getElementById('obs-pulse');
+  if(!panel) return;
+  panel.textContent = 'Loading operational context...';
+  const approvalReq = (typeof S !== 'undefined' && S.myRole === 'viewer')
+    ? Promise.resolve([])
+    : api('/api/workflows/approvals');
+  const [health, approvals, coverage] = await Promise.all([
+    api('/api/health'),
+    approvalReq,
+    api('/api/runbooks/coverage'),
+  ]);
+  const approvalCount = Array.isArray(approvals) ? approvals.length : 0;
+  const coveragePct = (!isApiError(coverage) && coverage && coverage.coverage_percent != null)
+    ? Number(coverage.coverage_percent || 0)
+    : 0;
+  const worker = health?.workflow_engine?.status || 'unknown';
+  const activeProblems = (typeof S !== 'undefined' && Array.isArray(S.allProblems))
+    ? S.allProblems.length
+    : (parseInt(document.getElementById('sc-prob')?.textContent || '0', 10) || 0);
+
+  let recommendation = 'System stable. Use this workspace for trend review and rapid pivots between tools.';
+  let accent = '#4ade80';
+  if(approvalCount > 0){
+    recommendation = `${approvalCount} workflow action(s) are waiting for operator approval. Clear these first so automation does not stall.`;
+    accent = '#fbbf24';
+  }else if(activeProblems > 0){
+    recommendation = `${activeProblems} active problem(s) are currently open. Start with Zabbix, then pivot to Grafana for correlation and capacity impact.`;
+    accent = '#f87171';
+  }else if(worker !== 'ok' && worker !== 'running' && worker !== 'executed'){
+    recommendation = 'The workflow worker heartbeat is not healthy. Scheduled automation may be delayed until the worker is restored.';
+    accent = '#f97316';
+  }else if(coveragePct < 70){
+    recommendation = `Runbook coverage is only ${coveragePct.toFixed(1)}%. Import more historical cases and validate the candidate runbooks before expanding automation.`;
+    accent = '#60a5fa';
+  }
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--text)">Ops Pulse</div>
+        <div style="margin-top:4px">A quick heuristic view of what deserves attention before you dive into dashboards.</div>
+      </div>
+      <div style="font-size:18px;font-weight:700;color:${accent}">${_obsCurrentTarget.toUpperCase()}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px">
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Active Problems</div>
+        <div style="font-size:16px;font-weight:700;color:${activeProblems ? '#f87171' : '#4ade80'};margin-top:4px">${activeProblems}</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Pending Approvals</div>
+        <div style="font-size:16px;font-weight:700;color:${approvalCount ? '#fbbf24' : '#4ade80'};margin-top:4px">${approvalCount}</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Runbook Coverage</div>
+        <div style="font-size:16px;font-weight:700;color:${coveragePct >= 80 ? '#4ade80' : '#60a5fa'};margin-top:4px">${coveragePct.toFixed(1)}%</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Workflow Worker</div>
+        <div style="font-size:16px;font-weight:700;color:${worker === 'ok' || worker === 'running' ? '#4ade80' : '#f97316'};margin-top:4px">${esc(worker)}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px;border-radius:10px;border:1px solid ${accent}33;background:${accent === '#4ade80' ? 'rgba(74,222,128,0.08)' : accent === '#fbbf24' ? 'rgba(251,191,36,0.08)' : accent === '#f87171' ? 'rgba(248,113,113,0.08)' : 'rgba(96,165,250,0.08)'};color:#e5eefc;line-height:1.6">
+      ${esc(recommendation)}
+    </div>
+  `;
+}
+
+async function loadObservability(pageKey){
+  if(!_obsServerConfig){
+    await loadObservabilityConfig();
+  }
+  const requested = (pageKey || '').startsWith('observability-') ? pageKey.substring('observability-'.length) : _obsCurrentTarget;
+  obsSelectTarget(requested || 'grafana');
+  if(_obsRefreshTimer) clearInterval(_obsRefreshTimer);
+  _obsRefreshTimer = setInterval(() => {
+    const activePage = document.querySelector('.page.active');
+    if(activePage?.id === 'page-observability') loadObservabilityPulse();
+  }, 30000);
 }
 
 function showLogin(){document.getElementById('login-overlay').style.display='flex';}
@@ -6815,6 +7449,7 @@ async function hrSaveRow(i, nodeId){
 // ═══════════════════════════════════════════════════════════
 async function init(){
   lucide.createIcons();
+  ensureMapSectionPlacement();
   // Fetch current user role
   const me=await api('/api/auth/me');
   if(!me) return; // not logged in — showLogin() already called by api()
@@ -6839,6 +7474,16 @@ async function init(){
   visNetwork.once('stabilized',()=>visNetwork.fit({animation:{duration:700}}));
   window.addEventListener('resize',()=>{ visNetwork.fit(); resizeTrafficCanvas(); });
   dismissSplash('SYSTEM READY');
+}
+
+function ensureMapSectionPlacement(){
+  const nav = document.querySelector('#sidebar nav');
+  const mapNav = nav?.querySelector('.nav-item[data-page="map"]');
+  const mapSection = nav?.querySelector('.map-section');
+  if(!nav || !mapNav || !mapSection) return;
+  if(mapNav.nextElementSibling !== mapSection){
+    nav.insertBefore(mapSection, mapNav.nextElementSibling);
+  }
 }
 
 function applyRoleUI(){
@@ -7279,7 +7924,17 @@ const WF_PROMPT_TEMPLATES = {
 async function loadWorkflows() {
   const grid = document.getElementById('workflows-grid');
   grid.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:32px;text-align:center;grid-column:1/-1">Loading...</div>';
-  const wfs = await api('/api/workflows') || [];
+  const data = await api('/api/workflows');
+  await loadWorkflowApprovals();
+  if (data === null) {
+    grid.innerHTML = '<div style="color:#f87171;font-size:12px;padding:32px;text-align:center;grid-column:1/-1">Unable to reach the workflow API.</div>';
+    return;
+  }
+  if (isApiError(data)) {
+    grid.innerHTML = `<div style="color:#f87171;font-size:12px;padding:32px;text-align:center;grid-column:1/-1">${esc(apiMessage(data))}</div>`;
+    return;
+  }
+  const wfs = Array.isArray(data) ? data : [];
   if (!wfs.length) {
     grid.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:32px;text-align:center;grid-column:1/-1">
       No workflows yet.<br><br>
@@ -7290,7 +7945,7 @@ async function loadWorkflows() {
   const empColors = {aria:'#00d4ff',nexus:'#a855f7',cipher:'#ff8c00',vega:'#4ade80'};
   const empNames  = {aria:'ARIA',nexus:'NEXUS',cipher:'CIPHER',vega:'VEGA'};
   const trigIcons = {manual:'🖱️',alarm:'🔔',schedule:'🕐'};
-  const actIcons  = {log:'📝',incident:'🚨',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
+  const actIcons  = {log:'📝',incident:'🚨',escalation:'🚩',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
   grid.innerHTML = wfs.map(w => {
     const tc = w.trigger_config ? (typeof w.trigger_config==='string'?JSON.parse(w.trigger_config):w.trigger_config) : {};
     let trigDetail = '';
@@ -7303,6 +7958,7 @@ async function loadWorkflows() {
     }
     const empColor = empColors[w.employee_id] || '#8aa0c0';
     const empLabel = empNames[w.employee_id]  || w.employee_id;
+    const risk     = wfRiskTierMeta(w.risk_tier);
     return `
     <div class="wf-card" id="wf-${w.id}">
       <div class="wf-card-top">
@@ -7312,6 +7968,7 @@ async function loadWorkflows() {
       <div class="wf-meta">
         <span class="wf-badge ${w.trigger_type}">${trigIcons[w.trigger_type]||''} ${w.trigger_type}${trigDetail?' · '+trigDetail:''}</span>
         <span style="font-size:10px;font-weight:700;color:${empColor};background:rgba(255,255,255,0.04);border:1px solid ${empColor}33;padding:2px 6px;border-radius:5px">${empLabel}</span>
+        <span style="font-size:10px;font-weight:700;color:${risk.color};background:${risk.bg};border:1px solid ${risk.color}33;padding:2px 6px;border-radius:5px">${risk.label}</span>
         ${(() => {
           let types = [];
           try { types = JSON.parse(w.action_type); if (!Array.isArray(types)) types = [w.action_type]; }
@@ -7330,6 +7987,89 @@ async function loadWorkflows() {
   }).join('');
 }
 
+function renderWorkflowApprovals(panels, approvals, errorMessage = '') {
+  if (!panels.length) return;
+  let html = '';
+  if (errorMessage) {
+    html = `<div style="color:#f87171">${esc(errorMessage)}</div>`;
+  } else if (!approvals.length) {
+    html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div style="font-size:12px;font-weight:700;color:var(--text)">Approval Queue</div><div style="margin-top:4px">No workflow actions are waiting for approval.</div></div><div style="font-size:18px;color:#4ade80;font-weight:700">0</div></div>';
+  } else {
+    html = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--text)">Approval Queue</div>
+          <div style="margin-top:4px">High-risk workflow actions pause here until an operator approves or rejects them.</div>
+        </div>
+        <div style="font-size:18px;color:#fbbf24;font-weight:700">${approvals.length}</div>
+      </div>
+      <div style="display:grid;gap:10px">
+        ${approvals.map(a => `
+          <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;background:rgba(255,255,255,0.02)">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <div style="flex:1">
+                <div style="font-size:12px;font-weight:700;color:var(--text)">${esc(a.workflow_name || 'Workflow')}</div>
+                <div style="font-size:10px;color:#fbbf24;margin-top:4px">${esc((a.effective_risk_tier || 'approval_required').replace(/_/g, ' '))}</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:4px">Requested by: ${esc(a.requested_by || 'system')}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5">${esc(a.action_plan || 'Pending operator review')}</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace">${esc(a.requested_at || '')}</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-shrink:0">
+                <button class="wf-btn run" onclick="decideWorkflowApproval(${a.id}, 'approve')">Approve</button>
+                <button class="wf-btn del" onclick="decideWorkflowApproval(${a.id}, 'reject')">Reject</button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  panels.forEach(panel => { panel.innerHTML = html; });
+}
+
+async function loadWorkflowApprovals() {
+  const panels = ['workflows-approval-panel', 'wfs-approval-panel']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  if (!panels.length) return;
+  if (typeof S !== 'undefined' && S.myRole === 'viewer') {
+    panels.forEach(panel => {
+      panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div style="font-size:12px;font-weight:700;color:var(--text)">Approval Queue</div><div style="margin-top:4px">Approval decisions are available to operators only.</div></div><div style="font-size:18px;color:var(--muted);font-weight:700">-</div></div>';
+    });
+    return;
+  }
+  panels.forEach(panel => { panel.textContent = 'Loading approval queue...'; });
+  const data = await api('/api/workflows/approvals');
+  if (data === null) {
+    renderWorkflowApprovals(panels, [], 'Unable to reach the workflow API.');
+    return;
+  }
+  if (isApiError(data)) {
+    renderWorkflowApprovals(panels, [], apiMessage(data));
+    return;
+  }
+  const approvals = Array.isArray(data) ? data.filter(a => a && a.id) : [];
+  renderWorkflowApprovals(panels, approvals);
+}
+
+async function decideWorkflowApproval(approvalId, decision) {
+  const action = decision === 'approve' ? 'approve' : 'reject';
+  const note = prompt(`${action === 'approve' ? 'Approve' : 'Reject'} this action (optional note):`, '');
+  if (note === null) return;
+  const data = await api(`/api/workflows/approvals/${approvalId}/${action}`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+  if (isApiError(data) || !data?.ok) {
+    showToast(apiMessage(data, `Unable to ${action} approval.`), 'error');
+    return;
+  }
+  showToast(action === 'approve' ? 'Workflow action approved.' : 'Workflow action rejected.', action === 'approve' ? 'success' : 'warn');
+  await loadWorkflowApprovals();
+  await loadWorkflows();
+  await loadWfs();
+}
+
 // Card-based trigger/employee/action selectors
 function wfSelectTrigger(t) {
   ['manual','alarm','schedule'].forEach(v => {
@@ -7345,7 +8085,7 @@ function wfSelectEmp(e) {
   });
   document.getElementById('wf-f-employee').value = e;
 }
-const _WF_ACTION_TYPES = ['log','incident','webhook','zabbix_ack','whatsapp_group','email','teams','teams_chat','teams_channel','whatsapp_dm'];
+const _WF_ACTION_TYPES = ['log','incident','escalation','webhook','zabbix_ack','whatsapp_group','email','teams','teams_chat','teams_channel','whatsapp_dm'];
 let _wfSelectedActions = new Set(['log']);
 
 function wfToggleAction(a) {
@@ -7428,15 +8168,39 @@ async function wfLoadTeamsChats() {
   status.textContent = 'Loading chats…'; status.style.color = 'var(--muted)';
   try {
     const data = await api('/api/ms365/chats');
-    if (!Array.isArray(data) || !data.length) {
-      sel.innerHTML = '<option value="">— No group chats found —</option>';
-      status.textContent = 'No chats found. Make sure Chat.ReadWrite.All permission is granted in Azure.';
+    if (data === null) {
+      sel.innerHTML = '<option value="">— Connection error —</option>';
+      status.textContent = 'Unable to reach Microsoft 365 API.';
+      status.style.color = '#f87171';
+      return;
+    }
+    if (isApiError(data)) {
+      sel.innerHTML = '<option value="">— Unable to load chats —</option>';
+      status.textContent = apiMessage(data);
+      status.style.color = '#f87171';
+      return;
+    }
+    const listError = Array.isArray(data) ? data.find(c => c && c.error) : null;
+    if (listError) {
+      sel.innerHTML = '<option value="">â€” Unable to load chats â€”</option>';
+      status.textContent = listError.error || 'Microsoft 365 returned an error.';
+      status.style.color = '#f87171';
+      return;
+    }
+    const chats = Array.isArray(data) ? data.filter(c => c && c.id) : [];
+    if (!chats.length) {
+      sel.innerHTML = '<option value="">— No chats found —</option>';
+      status.textContent = 'No recent chats were returned. Reconnect Microsoft 365 if you expect chats here.';
       status.style.color = '#ffb300'; return;
     }
     const cur = sel.value;
     sel.innerHTML = '<option value="">— Select a chat —</option>' +
-      data.map(c => `<option value="${c.id}" data-name="${(c.topic||c.id).replace(/"/g,'&quot;')}" ${c.id===cur?'selected':''}>${c.topic || '(no topic)'} [${c.chatType}]</option>`).join('');
-    status.textContent = `✓ ${data.length} chat(s) loaded.`; status.style.color = '#4ade80';
+      chats.map(c => {
+        const chatName = c.topic || c.name || c.id;
+        const chatType = c.chatType || c.type || 'group';
+        return `<option value="${c.id}" data-name="${chatName.replace(/"/g,'&quot;')}" ${c.id===cur?'selected':''}>${chatName} [${chatType}]</option>`;
+      }).join('');
+    status.textContent = `✓ ${chats.length} chat(s) loaded.`; status.style.color = '#4ade80';
   } catch(e) {
     status.textContent = `✗ ${e.message}`; status.style.color = '#f87171';
     sel.innerHTML = '<option value="">— Error loading chats —</option>';
@@ -7449,15 +8213,31 @@ async function wfLoadTeamsList() {
   status.textContent = 'Loading teams…'; status.style.color = 'var(--muted)';
   try {
     const data = await api('/api/ms365/teams');
-    if (!Array.isArray(data) || !data.length) {
+    if (data === null) {
+      teamSel.innerHTML = '<option value="">— Connection error —</option>';
+      status.textContent = 'Unable to reach Microsoft 365 API.';
+      status.style.color = '#f87171';
+      return;
+    }
+    if (isApiError(data)) {
+      teamSel.innerHTML = '<option value="">— Unable to load teams —</option>';
+      status.textContent = apiMessage(data);
+      status.style.color = '#f87171';
+      return;
+    }
+    const teams = Array.isArray(data) ? data.filter(t => t && t.id) : [];
+    if (!teams.length) {
       teamSel.innerHTML = '<option value="">— No teams found —</option>';
       status.textContent = 'No teams found. Make sure Team.ReadBasic.All permission is granted.';
       status.style.color = '#ffb300'; return;
     }
     teamSel.innerHTML = '<option value="">— Select a team —</option>' +
-      data.map(t => `<option value="${t.id}" data-name="${(t.displayName||'').replace(/"/g,'&quot;')}">${t.displayName}</option>`).join('');
+      teams.map(t => {
+        const teamName = t.displayName || t.name || t.id;
+        return `<option value="${t.id}" data-name="${teamName.replace(/"/g,'&quot;')}">${teamName}</option>`;
+      }).join('');
     chanSel.innerHTML = '<option value="">— Select team first —</option>';
-    status.textContent = `✓ ${data.length} team(s) loaded.`; status.style.color = '#4ade80';
+    status.textContent = `✓ ${teams.length} team(s) loaded.`; status.style.color = '#4ade80';
   } catch(e) {
     status.textContent = `✗ ${e.message}`; status.style.color = '#f87171';
     teamSel.innerHTML = '<option value="">— Error loading teams —</option>';
@@ -7474,13 +8254,29 @@ async function wfLoadTeamChannels() {
   status.textContent = 'Loading channels…'; status.style.color = 'var(--muted)';
   try {
     const data = await api(`/api/ms365/teams/${teamId}/channels`);
-    if (!Array.isArray(data) || !data.length) {
+    if (data === null) {
+      chanSel.innerHTML = '<option value="">— Connection error —</option>';
+      status.textContent = 'Unable to reach Microsoft 365 API.';
+      status.style.color = '#f87171';
+      return;
+    }
+    if (isApiError(data)) {
+      chanSel.innerHTML = '<option value="">— Unable to load channels —</option>';
+      status.textContent = apiMessage(data);
+      status.style.color = '#f87171';
+      return;
+    }
+    const channels = Array.isArray(data) ? data.filter(c => c && c.id) : [];
+    if (!channels.length) {
       chanSel.innerHTML = '<option value="">— No channels found —</option>';
       status.textContent = 'No channels found in this team.'; status.style.color = '#ffb300'; return;
     }
     chanSel.innerHTML = '<option value="">— Select a channel —</option>' +
-      data.map(c => `<option value="${c.id}" data-name="${(c.displayName||'').replace(/"/g,'&quot;')}">${c.displayName}</option>`).join('');
-    status.textContent = `✓ ${data.length} channel(s) loaded.`; status.style.color = '#4ade80';
+      channels.map(c => {
+        const channelName = c.displayName || c.name || c.id;
+        return `<option value="${c.id}" data-name="${channelName.replace(/"/g,'&quot;')}">${channelName}</option>`;
+      }).join('');
+    status.textContent = `✓ ${channels.length} channel(s) loaded.`; status.style.color = '#4ade80';
   } catch(e) {
     status.textContent = `✗ ${e.message}`; status.style.color = '#f87171';
     chanSel.innerHTML = '<option value="">— Error loading channels —</option>';
@@ -7517,6 +8313,49 @@ function wfFillPrompt(tpl) {
   document.getElementById('wf-f-prompt').value = WF_PROMPT_TEMPLATES[tpl] || '';
 }
 
+function wfGenerateSmartDraft() {
+  const condition = document.getElementById('wf-f-quick-condition').value.trim();
+  const actions = document.getElementById('wf-f-quick-actions').value.trim();
+  if (!condition || !actions) {
+    showToast('Describe both the abnormal condition and the follow-up actions.', 'warn');
+    return;
+  }
+  const actionText = actions.replace(/\s+/g, ' ').trim();
+  const prompt = [
+    'Review the live observability snapshot, active alarms, and operational context.',
+    'If everything looks healthy, respond with exactly "STATUS: NORMAL" and one short sentence.',
+    `Treat this as abnormal when: ${condition}`,
+    `When abnormal, do this: ${actionText}`,
+    'When abnormal, respond in this exact structure:',
+    'STATUS: ABNORMAL',
+    'FINDINGS: one concise paragraph',
+    'IMPACT: user/business impact',
+    'NEXT ACTION: immediate operator step',
+    'ESCALATION: who should own it next',
+  ].join('\n');
+  document.getElementById('wf-f-prompt').value = prompt;
+  const nameEl = document.getElementById('wf-f-name');
+  if (nameEl && !nameEl.value.trim()) {
+    nameEl.value = `Smart Rule - ${condition.slice(0, 48)}`;
+  }
+  wfSelectTrigger('schedule');
+  document.getElementById('wf-f-sched-preset').value = 'custom';
+  document.getElementById('wf-f-cron').style.display = '';
+  document.getElementById('wf-f-cron').value = '*/5 * * * *';
+
+  const lower = `${condition} ${actionText}`.toLowerCase();
+  const actionSet = new Set(['log']);
+  if (lower.includes('incident') || lower.includes('ticket')) actionSet.add('incident');
+  if (lower.includes('escalat') || lower.includes('follow up') || lower.includes('follow-up')) actionSet.add('escalation');
+  if (lower.includes('ack')) actionSet.add('zabbix_ack');
+  _wfApplyActionSet([...actionSet]);
+
+  document.getElementById('wf-f-risk-tier').value = actionSet.has('zabbix_ack') || lower.includes('restart') || lower.includes('block')
+    ? 'approval_required'
+    : 'safe_auto';
+  showToast('Smart workflow draft generated. Review the selected actions before saving.', 'success');
+}
+
 // Severity label → number sync
 document.addEventListener('change', e => {
   if (e.target.id === 'wf-f-severity-label') {
@@ -7526,6 +8365,8 @@ document.addEventListener('change', e => {
 
 function _wfResetActionFields() {
   // Reset all per-action config fields to defaults
+  document.getElementById('wf-f-quick-condition').value = '';
+  document.getElementById('wf-f-quick-actions').value = '';
   document.getElementById('wf-f-webhook-url').value = '';
   document.getElementById('wf-f-wa-emp').value = 'aria';
   document.getElementById('wf-f-wa-group').innerHTML = '<option value="">— click Load Groups first —</option>';
@@ -7551,6 +8392,11 @@ function _wfResetActionFields() {
   document.getElementById('wf-f-inc-title').value = '';
   document.getElementById('wf-f-inc-severity').value = '3';
   document.getElementById('wf-f-inc-owner').value = 'aria';
+  document.getElementById('wf-f-esc-to').value = 'Duty Manager';
+  document.getElementById('wf-f-esc-channel').value = 'teams';
+  document.getElementById('wf-f-esc-followup').value = '30';
+  document.getElementById('wf-f-esc-max').value = '3';
+  document.getElementById('wf-f-esc-message').value = '';
 }
 
 function _wfApplyActionSet(actionSet) {
@@ -7572,6 +8418,7 @@ function openCreateWorkflowModal() {
   document.getElementById('wf-modal-title').textContent = 'New Workflow';
   document.getElementById('wf-f-name').value = '';
   document.getElementById('wf-f-prompt').value = '';
+  document.getElementById('wf-f-risk-tier').value = 'safe_auto';
   document.getElementById('wf-f-hostfilter').value = '';
   document.getElementById('wf-f-active').checked = true;
   document.getElementById('wf-f-cron').value = '0 8 * * *';
@@ -7586,11 +8433,15 @@ function openCreateWorkflowModal() {
 
 async function openEditWorkflowModal(id) {
   const wf = await api(`/api/workflows/${id}`);
-  if (!wf) return;
+  if (!wf || isApiError(wf)) {
+    if (wf) showToast(apiMessage(wf, 'Unable to load workflow.'), 'error');
+    return;
+  }
   _wfEditId = id;
   document.getElementById('wf-modal-title').textContent = 'Edit Workflow';
   document.getElementById('wf-f-name').value = wf.name || '';
   document.getElementById('wf-f-prompt').value = wf.prompt_template || '';
+  document.getElementById('wf-f-risk-tier').value = wf.risk_tier || 'safe_auto';
   document.getElementById('wf-f-active').checked = !!wf.is_active;
 
   // Parse trigger config
@@ -7669,6 +8520,12 @@ async function openEditWorkflowModal(id) {
       document.getElementById('wf-f-inc-title').value    = c.title    || '';
       document.getElementById('wf-f-inc-severity').value = String(c.severity || '3');
       document.getElementById('wf-f-inc-owner').value    = c.owner_id || 'aria';
+    } else if (at === 'escalation') {
+      document.getElementById('wf-f-esc-to').value        = c.escalated_to || 'Duty Manager';
+      document.getElementById('wf-f-esc-channel').value   = c.channel || 'teams';
+      document.getElementById('wf-f-esc-followup').value  = String(c.followup_minutes || '30');
+      document.getElementById('wf-f-esc-max').value       = String(c.max_followups || '3');
+      document.getElementById('wf-f-esc-message').value   = c.message || '';
     }
   }
 
@@ -7731,7 +8588,7 @@ async function saveWorkflow() {
     } else if (at === 'teams_chat') {
       const chatSel = document.getElementById('wf-f-teams-chat-id');
       const chatId  = chatSel.value;
-      if (!chatId) { showToast('Select a Teams group chat first.', 'warn'); return; }
+      if (!chatId) { showToast('Select a Teams chat first.', 'warn'); return; }
       action_config[at] = {
         emp_id:    document.getElementById('wf-f-teams-chat-emp').value,
         chat_id:   chatId,
@@ -7760,6 +8617,18 @@ async function saveWorkflow() {
         severity: parseInt(document.getElementById('wf-f-inc-severity').value) || 3,
         owner_id: document.getElementById('wf-f-inc-owner').value,
       };
+    } else if (at === 'escalation') {
+      const escalatedTo = document.getElementById('wf-f-esc-to').value.trim();
+      if (!escalatedTo) { showToast('Enter who should own the escalation.', 'warn'); return; }
+      const escMessage = document.getElementById('wf-f-esc-message').value.trim();
+      action_config[at] = {
+        employee_id:      document.getElementById('wf-f-employee').value,
+        escalated_to:     escalatedTo,
+        channel:          document.getElementById('wf-f-esc-channel').value,
+        followup_minutes: Math.max(5, Math.min(240, parseInt(document.getElementById('wf-f-esc-followup').value) || 30)),
+        max_followups:    Math.max(1, Math.min(10, parseInt(document.getElementById('wf-f-esc-max').value) || 3)),
+        ...(escMessage ? { message: escMessage } : {}),
+      };
     }
   }
 
@@ -7772,17 +8641,35 @@ async function saveWorkflow() {
     prompt_template: document.getElementById('wf-f-prompt').value.trim(),
     action_type:     JSON.stringify(selectedActions),
     action_config:   JSON.stringify(action_config),
+    risk_tier:       document.getElementById('wf-f-risk-tier').value,
     is_active:       document.getElementById('wf-f-active').checked ? 1 : 0,
   };
   const url    = _wfEditId ? `/api/workflows/${_wfEditId}` : '/api/workflows';
   const method = _wfEditId ? 'PUT' : 'POST';
   const r = await api(url, { method, body: JSON.stringify(body) });
-  if (r) { closeWfModal(); loadWorkflows(); }
+  if (isApiError(r) || r?.ok === false) {
+    showToast(apiMessage(r, 'Unable to save workflow.'), 'error');
+    return;
+  }
+  if (r) {
+    closeWfModal();
+    loadWorkflows();
+    loadWfs();
+  }
 }
 
 async function triggerWorkflow(id, name) {
   if (!confirm(`Run "${name}" now?`)) return;
   const r = await api(`/api/workflows/${id}/trigger`, { method: 'POST', body: '{}' });
+  if (isApiError(r) || r?.ok === false) {
+    alert(apiMessage(r, 'Workflow trigger failed.'));
+    return;
+  }
+  if (r?.status === 'awaiting_approval') {
+    alert('Workflow queued for approval. A different operator must approve it before it can execute.');
+    await loadWorkflowApprovals();
+    return;
+  }
   if (r?.ok) { alert('Workflow triggered! Check History to see the result.'); }
 }
 
@@ -7796,7 +8683,7 @@ async function viewWfRuns(id, name) {
     document.getElementById('wf-runs-list').innerHTML = '<div style="color:var(--muted);font-size:12px;padding:16px">No runs yet. Click ▶ Run Now to trigger manually.</div>';
     return;
   }
-  const statusColor = {success:'#4ade80',error:'#ef4444',running:'#fbbf24'};
+  const statusColor = {success:'#4ade80',error:'#ef4444',running:'#fbbf24',awaiting_approval:'#fbbf24',rejected:'#94a3b8'};
   document.getElementById('wf-runs-list').innerHTML = runs.map(r => `
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;background:rgba(11,17,34,0.8)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -7812,7 +8699,14 @@ async function viewWfRuns(id, name) {
 async function deleteWorkflow(id) {
   if (!confirm('Delete this workflow?')) return;
   const r = await api(`/api/workflows/${id}`, { method: 'DELETE' });
-  if (r) loadWorkflows();
+  if (isApiError(r) || r?.ok === false) {
+    showToast(apiMessage(r, 'Unable to delete workflow.'), 'error');
+    return;
+  }
+  if (r) {
+    loadWorkflows();
+    loadWfs();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -8219,18 +9113,46 @@ async function commsLoadTeamsChats() {
   list.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:10px">Loading…</div>';
   try {
     const data = await api('/api/ms365/chats');
-    if (!Array.isArray(data) || !data.length) {
-      list.innerHTML = '<div style="font-size:10px;color:#ffb300;padding:10px">No chats found. Check Chat.ReadWrite.All permission.</div>';
+    if (data === null) {
+      list.innerHTML = '<div style="font-size:10px;color:#f87171;padding:10px">Unable to reach Microsoft 365 API.</div>';
+      status.textContent = '✗ Unable to reach Microsoft 365 API.';
+      status.style.color = '#f87171';
+      return;
+    }
+    if (isApiError(data)) {
+      const msg = apiMessage(data);
+      list.innerHTML = `<div style="font-size:10px;color:#f87171;padding:10px">${esc(msg)}</div>`;
+      status.textContent = '✗ ' + msg;
+      status.style.color = '#f87171';
+      return;
+    }
+    const listError = Array.isArray(data)
+      ? data.find(row => row && typeof row === 'object' && row.error)
+      : null;
+    if (listError) {
+      const msg = listError.error || 'Microsoft 365 returned an error.';
+      list.innerHTML = `<div style="font-size:10px;color:#f87171;padding:10px">${esc(msg)}</div>`;
+      status.textContent = 'âœ— ' + msg;
+      status.style.color = '#f87171';
+      return;
+    }
+    const chats = Array.isArray(data) ? data.filter(c => c && c.id) : [];
+    if (!chats.length) {
+      list.innerHTML = '<div style="font-size:10px;color:#ffb300;padding:10px">No recent chats were returned. Reconnect Microsoft 365 and retry if you expect chats here.</div>';
       status.textContent = ''; return;
     }
-    status.textContent = `${data.length} chats`; status.style.color = '#4ade80';
-    list.innerHTML = data.map(c => `
-      <div onclick="commsOpenTeamsChat('${c.id.replace(/'/g,"\\'")}','${(c.topic||'Chat').replace(/'/g,"\\'")}')"
+    status.textContent = `${chats.length} chats`; status.style.color = '#4ade80';
+    list.innerHTML = chats.map(c => {
+      const chatName = c.topic || c.name || 'Chat';
+      const chatType = c.chatType || c.type || 'group';
+      return `
+      <div onclick="commsOpenTeamsChat('${c.id.replace(/'/g,"\\'")}','${chatName.replace(/'/g,"\\'")}')"
            style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s"
            onmouseover="this.style.background='rgba(98,100,167,0.1)'" onmouseout="this.style.background=''">
-        <div style="font-size:10px;font-weight:600;color:#8b8dcc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.topic || '(Group Chat)'}</div>
-        <div style="font-size:9px;color:var(--muted)">${c.chatType}</div>
-      </div>`).join('');
+        <div style="font-size:10px;font-weight:600;color:#8b8dcc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(chatName || '(Group Chat)')}</div>
+        <div style="font-size:9px;color:var(--muted)">${esc(chatType)}</div>
+      </div>`;
+    }).join('');
   } catch(e) {
     status.textContent = '✗ ' + e.message; status.style.color = '#f87171';
     list.innerHTML = `<div style="font-size:10px;color:#f87171;padding:10px">${e.message}</div>`;
@@ -8243,13 +9165,22 @@ async function commsOpenTeamsChat(chatId, chatName) {
   msgs.innerHTML = '<div style="color:var(--muted);font-style:italic">Loading messages…</div>';
   try {
     const data = await api(`/api/ms365/chats/${encodeURIComponent(chatId)}/messages`);
-    if (!Array.isArray(data) || !data.length) {
+    if (data === null) {
+      msgs.innerHTML = '<div style="color:#f87171">Unable to reach Microsoft 365 API.</div>';
+      return;
+    }
+    if (isApiError(data)) {
+      msgs.innerHTML = `<div style="color:#f87171">${esc(apiMessage(data))}</div>`;
+      return;
+    }
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) {
       msgs.innerHTML = '<div style="color:var(--muted);font-style:italic">No messages.</div>'; return;
     }
-    msgs.innerHTML = data.slice().reverse().map(m => {
-      const sender = m.from?.user?.displayName || m.from?.application?.displayName || 'System';
-      const ts     = (m.createdDateTime||'').substring(0,16).replace('T',' ');
-      const body   = (m.body?.content||'').replace(/<[^>]*>/g,'').substring(0,200);
+    msgs.innerHTML = rows.slice().reverse().map(m => {
+      const sender = m.from?.user?.displayName || m.from?.application?.displayName || m.sender || 'System';
+      const ts     = ((m.createdDateTime || m.date || '')).substring(0,16).replace('T',' ');
+      const body   = ((m.body?.content || m.text || '')).replace(/<[^>]*>/g,'').substring(0,200);
       return `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.04)">
         <div style="display:flex;justify-content:space-between;margin-bottom:2px">
           <span style="color:#a855f7;font-weight:600;font-size:9px">${sender}</span>
@@ -10034,18 +10965,116 @@ function refreshTvTicker() {
 // ═══════════════════════════════════════════════════════════
 //  RUNBOOKS
 // ═══════════════════════════════════════════════════════════
-let _rbAll = [], _rbFilter = 'approved', _rbSearch = '';
+let _rbAll = [], _rbFilter = 'approved', _rbSearch = '', _rbCoverage = null;
 
 async function loadRunbooks() {
   const grid = document.getElementById('rb-grid');
   if (grid) grid.innerHTML = '<div class="rb-empty">Loading…</div>';
-  const data = await api('/api/runbooks?include_deprecated=true') || [];
-  _rbAll = Array.isArray(data) ? data : (data.runbooks || []);
+  const data = await api('/api/runbooks?include_deprecated=true');
+  await loadRunbookCoverage();
+  if (data === null) {
+    _rbAll = [];
+    if (grid) grid.innerHTML = '<div class="rb-empty" style="color:#f87171">Unable to reach the runbook API.</div>';
+    return;
+  }
+  if (isApiError(data)) {
+    _rbAll = [];
+    if (grid) grid.innerHTML = `<div class="rb-empty" style="color:#f87171">${esc(apiMessage(data))}</div>`;
+    return;
+  }
+  _rbAll = Array.isArray(data) ? data : (data?.runbooks || []);
   renderRunbooks();
   // Update badge count (approved runbooks)
   const badge = document.getElementById('runbooks-badge');
   const approved = _rbAll.filter(r => r.status === 'approved').length;
   if (badge) { badge.textContent = approved; badge.classList.toggle('hidden', approved === 0); }
+}
+
+function renderRunbookCoverage() {
+  const panel = document.getElementById('rb-coverage-panel');
+  if (!panel) return;
+  if (!_rbCoverage) {
+    panel.textContent = 'Coverage data unavailable.';
+    return;
+  }
+  const c = _rbCoverage;
+  const gapRows = Array.isArray(c.gaps) ? c.gaps : [];
+  panel.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--text)">Runbook Coverage</div>
+        <div style="margin-top:4px">Coverage is measured against resolved incidents that already have a linked runbook draft or approved SOP.</div>
+      </div>
+      <div style="font-size:18px;font-weight:700;color:${(c.coverage_percent || 0) >= 80 ? '#4ade80' : '#fbbf24'}">${Number(c.coverage_percent || 0).toFixed(1)}%</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px">
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Resolved Incidents</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-top:4px">${c.resolved_incidents || 0}</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Linked Incidents</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-top:4px">${c.linked_incidents || 0}</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Approved Runbooks</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-top:4px">${c.approved_runbooks || 0}/${c.runbooks_total || 0}</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Validated / Candidate</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-top:4px">${c.validated_runbooks || 0} / ${c.candidate_runbooks || 0}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:8px">Recent Coverage Gaps</div>
+      ${gapRows.length ? `
+        <div style="display:grid;gap:8px">
+          ${gapRows.map(g => `
+            <div style="display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title || 'Untitled incident')}</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:4px">${esc(g.host || 'Unknown host')} · Severity ${g.severity || '-'}</div>
+              </div>
+              <button class="tb-btn" onclick="rbDraftFromIncident(${g.id})" style="margin-left:0">Draft Runbook</button>
+            </div>
+          `).join('')}
+        </div>
+      ` : '<div style="font-size:10px;color:#4ade80">No recent gaps. Every resolved incident is already linked.</div>'}
+    </div>
+  `;
+}
+
+async function loadRunbookCoverage() {
+  const panel = document.getElementById('rb-coverage-panel');
+  if (!panel) return;
+  panel.textContent = 'Loading coverage...';
+  const data = await api('/api/runbooks/coverage');
+  if (data === null) {
+    _rbCoverage = { gaps: [] };
+    panel.innerHTML = '<div style="color:#f87171">Unable to reach the runbook API.</div>';
+    return;
+  }
+  if (isApiError(data)) {
+    _rbCoverage = { gaps: [] };
+    panel.innerHTML = `<div style="color:#f87171">${esc(apiMessage(data))}</div>`;
+    return;
+  }
+  _rbCoverage = data || { gaps: [] };
+  renderRunbookCoverage();
+}
+
+async function rbDraftFromIncident(incidentId) {
+  if (!confirm(`Create a candidate runbook draft from incident #${incidentId}?`)) return;
+  const data = await api(`/api/runbooks/from-incident/${incidentId}`, {
+    method: 'POST',
+    body: '{}',
+  });
+  if (isApiError(data) || !data?.ok) {
+    showToast(apiMessage(data, 'Unable to create runbook draft.'), 'error');
+    return;
+  }
+  showToast(`Draft runbook created from incident #${incidentId}.`, 'success');
+  await loadRunbooks();
 }
 
 function rbFilterSet(f, btn) {
@@ -10081,7 +11110,9 @@ function renderRunbooks() {
       <div class="rb-card-meta">
         ${r.author_id ? `<span>✍ ${r.author_id.toUpperCase()}</span>` : ''}
         ${r.estimated_mttr ? `<span>⏱ ${r.estimated_mttr}m MTTR</span>` : ''}
+        ${r.validation_status ? `<span>🧪 ${esc(r.validation_status)}</span>` : ''}
         ${r.last_tested ? `<span>✓ tested ${r.last_tested}</span>` : ''}
+        ${r.source_incident_id ? `<span>#${r.source_incident_id}</span>` : ''}
         ${r.related_hosts ? `<span>🖥 ${r.related_hosts}</span>` : ''}
       </div>
       ${kws.length ? `<div class="rb-card-keywords">${kws.map(k=>`<span class="rb-keyword">${esc(k)}</span>`).join('')}</div>` : ''}
@@ -10100,6 +11131,7 @@ async function openRbModal(rbId) {
   });
   document.getElementById('rb-author').value = '';
   document.getElementById('rb-status').value = 'draft';
+  document.getElementById('rb-validation-status').value = 'untested';
   document.getElementById('rb-mttr').value = '';
   document.getElementById('rb-approve-btn').style.display = 'none';
   document.getElementById('rb-deprecate-btn').style.display = 'none';
@@ -10108,11 +11140,12 @@ async function openRbModal(rbId) {
 
   if (rbId) {
     const r = await api(`/api/runbooks/${rbId}`);
-    if (r) {
+    if (r && !isApiError(r)) {
       document.getElementById('rb-edit-id').value = r.id;
       document.getElementById('rb-title').value = r.title || '';
       document.getElementById('rb-author').value = r.author_id || '';
       document.getElementById('rb-status').value = r.status || 'draft';
+      document.getElementById('rb-validation-status').value = r.validation_status || 'untested';
       document.getElementById('rb-keywords').value = r.trigger_keywords || '';
       document.getElementById('rb-hosts').value = r.related_hosts || '';
       document.getElementById('rb-mttr').value = r.estimated_mttr || '';
@@ -10124,6 +11157,9 @@ async function openRbModal(rbId) {
       document.getElementById('rb-rollback').value = r.rollback || '';
       if (r.status === 'draft') document.getElementById('rb-approve-btn').style.display = '';
       if (r.status !== 'deprecated') document.getElementById('rb-deprecate-btn').style.display = '';
+    } else if (r) {
+      showToast(apiMessage(r, 'Unable to load runbook.'), 'error');
+      return;
     }
   }
   modal.classList.add('active');
@@ -10141,6 +11177,7 @@ async function saveRunbook() {
     title:            document.getElementById('rb-title').value.trim(),
     author_id:        document.getElementById('rb-author').value || null,
     status:           document.getElementById('rb-status').value,
+    validation_status: document.getElementById('rb-validation-status').value,
     trigger_keywords: document.getElementById('rb-keywords').value.trim(),
     related_hosts:    document.getElementById('rb-hosts').value.trim(),
     estimated_mttr:   parseInt(document.getElementById('rb-mttr').value) || null,
@@ -10300,7 +11337,18 @@ let _wfsAll = [], _wfsFilter = 'all';
 async function loadWfs() {
   const grid = document.getElementById('wfs-grid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--muted);font-size:12px">Loading…</div>';
-  const data = await api('/api/workflows') || [];
+  const data = await api('/api/workflows');
+  await loadWorkflowApprovals();
+  if (data === null) {
+    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:#f87171;font-size:12px">Unable to reach the workflow API.</div>';
+    _wfsAll = [];
+    return;
+  }
+  if (isApiError(data)) {
+    if (grid) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px;color:#f87171;font-size:12px">${esc(apiMessage(data))}</div>`;
+    _wfsAll = [];
+    return;
+  }
   _wfsAll = Array.isArray(data) ? data : [];
   renderWfs();
 }
@@ -10325,7 +11373,7 @@ function renderWfs() {
   const empColors = {aria:'#00d4ff',nexus:'#a78bfa',cipher:'#ff4466',vega:'#4ade80'};
   const empNames  = {aria:'ARIA',nexus:'NEXUS',cipher:'CIPHER',vega:'VEGA'};
   const trigIcons = {manual:'🖱️',alarm:'🔔',schedule:'🕐'};
-  const actIcons  = {log:'📝',incident:'🚨',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
+  const actIcons  = {log:'📝',incident:'🚨',escalation:'🚩',webhook:'🌐',zabbix_ack:'✅',whatsapp_group:'📱',email:'📧',teams:'🔗',teams_chat:'💬',teams_channel:'📢',whatsapp_dm:'📩'};
   grid.innerHTML = list.map(w => {
     const tc = w.trigger_config ? (typeof w.trigger_config==='string'?JSON.parse(w.trigger_config):w.trigger_config) : {};
     let trigDetail = '';
@@ -10336,6 +11384,7 @@ function renderWfs() {
     } else if (w.trigger_type==='schedule') { trigDetail = tc.cron || ''; }
     const empColor = empColors[w.employee_id] || '#8aa0c0';
     const empLabel = empNames[w.employee_id]  || w.employee_id;
+    const risk     = wfRiskTierMeta(w.risk_tier);
     return `<div class="wf-card" id="wfs-${w.id}">
       <div class="wf-card-top">
         <div class="wf-name">${esc(w.name||'')}</div>
@@ -10344,6 +11393,7 @@ function renderWfs() {
       <div class="wf-meta">
         <span class="wf-badge ${w.trigger_type}">${trigIcons[w.trigger_type]||''} ${w.trigger_type}${trigDetail?' · '+trigDetail:''}</span>
         <span style="font-size:10px;font-weight:700;color:${empColor};background:rgba(255,255,255,0.04);border:1px solid ${empColor}33;padding:2px 6px;border-radius:5px">${empLabel}</span>
+        <span style="font-size:10px;font-weight:700;color:${risk.color};background:${risk.bg};border:1px solid ${risk.color}33;padding:2px 6px;border-radius:5px">${risk.label}</span>
       </div>
       ${w.prompt_template?`<div class="wf-prompt-preview">${esc(w.prompt_template.substring(0,90))}${w.prompt_template.length>90?'…':''}</div>`:''}
       <div class="wf-actions">
@@ -11586,6 +12636,8 @@ async function zbxSelectScript(idx){
     <button onclick="vnSend()" style="background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:var(--cyan);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer">Send ↵</button>
   </div>
 </div>
+
+<script src="/static/js/app_shell.js"></script>
 
 </body>
 </html>

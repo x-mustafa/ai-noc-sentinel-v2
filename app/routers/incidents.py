@@ -13,6 +13,7 @@ from typing import Optional, Literal
 
 from app.deps import get_session, require_operator
 from app.database import fetch_one, fetch_all, execute
+from app.services.ai_provider import resolve_runtime_ai
 from app.services.employee_context import set_employee_investigating, set_employee_available
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,7 @@ async def create_incident(body: IncidentBody, session: dict = Depends(get_sessio
 
 # ── Single Incident ────────────────────────────────────────────────────────────
 
-@router.get("/{inc_id}")
+@router.get("/{inc_id:int}")
 async def get_incident(inc_id: int, session: dict = Depends(get_session)):
     """Get a single incident with all its updates."""
     row = await fetch_one("SELECT * FROM incidents WHERE id=%s", (inc_id,))
@@ -139,7 +140,7 @@ async def get_incident(inc_id: int, session: dict = Depends(get_session)):
     return row
 
 
-@router.put("/{inc_id}")
+@router.put("/{inc_id:int}")
 async def update_incident(
     inc_id: int,
     body: IncidentPatchBody,
@@ -194,7 +195,28 @@ async def update_incident(
 
 # ── Updates ────────────────────────────────────────────────────────────────────
 
-@router.post("/{inc_id}/update")
+@router.put("/{inc_id:int}/link-runbook/{rb_id:int}")
+async def link_runbook(
+    inc_id: int,
+    rb_id: int,
+    session: dict = Depends(require_operator),
+):
+    incident = await fetch_one("SELECT id FROM incidents WHERE id=%s", (inc_id,))
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    runbook = await fetch_one("SELECT id FROM runbooks WHERE id=%s", (rb_id,))
+    if not runbook:
+        raise HTTPException(404, "Runbook not found")
+
+    await execute("UPDATE incidents SET runbook_id=%s WHERE id=%s", (rb_id, inc_id))
+    await execute(
+        "UPDATE runbooks SET source_incident_id=COALESCE(source_incident_id, %s) WHERE id=%s",
+        (inc_id, rb_id),
+    )
+    return {"ok": True, "incident_id": inc_id, "runbook_id": rb_id}
+
+
+@router.post("/{inc_id:int}/update")
 async def add_incident_update(
     inc_id: int,
     body: IncidentUpdateBody,
@@ -216,7 +238,7 @@ async def add_incident_update(
 
 # ── Assign ─────────────────────────────────────────────────────────────────────
 
-@router.post("/{inc_id}/assign/{employee_id}")
+@router.post("/{inc_id:int}/assign/{employee_id}")
 async def assign_incident(
     inc_id:      int,
     employee_id: str,
@@ -256,7 +278,7 @@ async def assign_incident(
 
 # ── AI Status Update ───────────────────────────────────────────────────────────
 
-@router.post("/{inc_id}/ask-update")
+@router.post("/{inc_id:int}/ask-update")
 async def ask_incident_update(
     inc_id: int,
     session: dict = Depends(get_session),
@@ -309,27 +331,10 @@ async def _ai_incident_update(inc_id: int, employee_id: str, prompt: str) -> Non
         from app.services.employee_prompt import build_employee_system_prompt
         from app.services.ai_stream import stream_ai
 
-        cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-        provider = cfg.get("default_ai_provider") or "claude"
-        key_map  = {
-            "claude":      "claude_key",
-            "openai":      "openai_key",
-            "gemini":      "gemini_key",
-            "grok":        "grok_key",
-            "openrouter":  "openrouter_key",
-        }
-        api_key = cfg.get(key_map.get(provider, "claude_key"), "")
+        cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+        provider, model, api_key = resolve_runtime_ai(cfg)
         if not api_key:
             return
-
-        model_defaults = {
-            "claude":     "claude-haiku-4-5-20251001",
-            "openai":     "gpt-4o-mini",
-            "gemini":     "gemini-2.0-flash",
-            "grok":       "grok-2-latest",
-            "openrouter": "anthropic/claude-haiku-4-5",
-        }
-        model = cfg.get("default_ai_model") or model_defaults.get(provider, "claude-haiku-4-5-20251001")
 
         persona = await build_employee_system_prompt(employee_id)
         system = (
@@ -360,10 +365,10 @@ async def _ai_incident_update(inc_id: int, employee_id: str, prompt: str) -> Non
 
 # ── F6 — Generate Runbook from Resolved Incident ───────────────────────────────
 
-@router.post("/{inc_id}/generate-runbook")
+@router.post("/{inc_id:int}/generate-runbook")
 async def generate_runbook_from_incident(
     inc_id: int,
-    session: dict = Depends(get_session),
+    session: dict = Depends(require_operator),
 ):
     """
     Ask the assigned AI employee to draft a runbook from a resolved/closed incident.
@@ -412,27 +417,10 @@ async def _ai_generate_runbook(
         from app.services.employee_prompt import build_employee_system_prompt
         from app.services.ai_stream import stream_ai
 
-        cfg      = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
-        provider = cfg.get("default_ai_provider") or "claude"
-        key_map  = {
-            "claude":     "claude_key",
-            "openai":     "openai_key",
-            "gemini":     "gemini_key",
-            "grok":       "grok_key",
-            "openrouter": "openrouter_key",
-        }
-        api_key = cfg.get(key_map.get(provider, "claude_key"), "")
+        cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
+        provider, model, api_key = resolve_runtime_ai(cfg)
         if not api_key:
             return
-
-        model_defaults = {
-            "claude":     "claude-haiku-4-5-20251001",
-            "openai":     "gpt-4o-mini",
-            "gemini":     "gemini-2.0-flash",
-            "grok":       "grok-2-latest",
-            "openrouter": "anthropic/claude-haiku-4-5",
-        }
-        model   = cfg.get("default_ai_model") or model_defaults.get(provider, "claude-haiku-4-5-20251001")
         persona = await build_employee_system_prompt(employee_id)
 
         system = (
@@ -482,13 +470,14 @@ async def _ai_generate_runbook(
 
         rb_id = await execute(
             "INSERT INTO runbooks "
-            "(title, author_id, trigger_desc, trigger_keywords, symptoms, "
+            "(title, author_id, source_incident_id, trigger_desc, trigger_keywords, symptoms, "
             "diagnosis, resolution, prevention, rollback, estimated_mttr, "
-            "related_hosts, status) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'draft')",
+            "related_hosts, status, validation_status) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'draft','candidate')",
             (
                 str(rb_data.get("title", f"Runbook: INC-{inc_id:04d}"))[:300],
                 employee_id,
+                inc_id,
                 rb_data.get("trigger_desc"),
                 rb_data.get("trigger_keywords"),
                 rb_data.get("symptoms"),
@@ -500,6 +489,7 @@ async def _ai_generate_runbook(
                 incident.get("host"),
             ),
         )
+        await execute("UPDATE incidents SET runbook_id=%s WHERE id=%s", (rb_id, inc_id))
         if result_holder is not None:
             result_holder.append(rb_id)
 
