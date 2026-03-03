@@ -1690,7 +1690,7 @@ select.form-inp option{background:#0d1628}
     </div>
   </div>
   <nav>
-    <div class="nav-item active" data-page="map" onclick="navigate('map')">
+    <div class="nav-item" data-page="map" onclick="navigate('map')">
       <span class="nav-icon"><i data-lucide="network" style="width:16px;height:16px"></i></span>
       <span class="nav-label">Network Map</span>
     </div>
@@ -1762,6 +1762,10 @@ select.form-inp option{background:#0d1628}
 
     <!-- EXTERNAL DASHBOARDS -->
     <div class="ext-section-hdr">Dashboards</div>
+    <div class="nav-item active" data-page="observability-summary" onclick="openDashboardPage('summary')">
+      <span class="nav-icon"><i data-lucide="layout-dashboard" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Monitoring Home</span>
+    </div>
     <div class="nav-item ext-grafana" data-page="observability-grafana" onclick="openDashboardPage('grafana')">
       <span class="nav-icon">
         <img src="https://upload.wikimedia.org/wikipedia/commons/a/a1/Grafana_logo.svg" width="16" height="16" style="object-fit:contain;flex-shrink:0" alt="Grafana">
@@ -1815,7 +1819,7 @@ select.form-inp option{background:#0d1628}
 
   <!-- TOP BAR -->
   <div id="topbar">
-    <div class="topbar-title" id="page-title">Maps</div>
+    <div class="topbar-title" id="page-title">Monitoring Home</div>
     <div class="stat-chip"><div class="stat-dot" style="background:#3498db"></div><span class="stat-num" id="sc-total">—</span><span class="stat-lbl">hosts</span></div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--green)"></div><span class="stat-num" id="sc-ok">—</span><span class="stat-lbl">ok</span></div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--red)"></div><span class="stat-num" id="sc-prob">—</span><span class="stat-lbl">problems</span></div>
@@ -1829,7 +1833,7 @@ select.form-inp option{background:#0d1628}
   </div>
 
   <!-- ══ MAP PAGE ══ -->
-  <div class="page active" id="page-map">
+  <div class="page" id="page-map">
     <!-- Layer rail -->
     <div id="layer-rail">
       <div class="lr-cell lr-ext">External</div>
@@ -3474,22 +3478,23 @@ select.form-inp option{background:#0d1628}
 </div>
 
 <!-- ══ OBSERVABILITY HUB PAGE ══ -->
-<div class="page" id="page-observability">
+<div class="page active" id="page-observability">
   <div style="display:flex;flex-direction:column;flex:1;overflow:hidden">
     <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:rgba(6,10,20,0.72);flex-wrap:wrap">
-      <div style="display:flex;gap:8px;align-items:center">
+    <div style="display:flex;gap:8px;align-items:center">
+        <button class="filter-btn active" id="obs-tab-summary" onclick="obsSelectTarget('summary')">Summary</button>
         <button class="filter-btn" id="obs-tab-grafana" onclick="obsSelectTarget('grafana')">Grafana</button>
         <button class="filter-btn" id="obs-tab-zabbix" onclick="obsSelectTarget('zabbix')">Zabbix</button>
         <button class="filter-btn" id="obs-tab-kuma" onclick="obsSelectTarget('kuma')">Kuma</button>
       </div>
-      <div style="flex:1;min-width:240px">
+      <div id="obs-url-wrap" style="flex:1;min-width:240px">
         <input id="obs-url" type="text" placeholder="Dashboard URL" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;color:#e0eaff;font-size:11px;outline:none;font-family:'JetBrains Mono',monospace">
       </div>
       <div style="display:flex;gap:8px">
         <button class="tb-btn" id="obs-access-btn" onclick="openObservabilityAccessSettings()" style="margin-left:0">Access</button>
-        <button class="tb-btn" onclick="obsSaveUrl()" style="margin-left:0">Save URL</button>
-        <button class="tb-btn" onclick="obsLoadFrame(true)" style="margin-left:0">Reload</button>
-        <button class="btn btn-primary" onclick="obsOpenExternal()" style="font-size:11px;padding:5px 14px">Open</button>
+        <button class="tb-btn" id="obs-save-btn" onclick="obsSaveUrl()" style="margin-left:0">Save URL</button>
+        <button class="tb-btn" id="obs-reload-btn" onclick="obsLoadFrame(true)" style="margin-left:0">Reload</button>
+        <button class="btn btn-primary" id="obs-open-btn" onclick="obsOpenExternal()" style="font-size:11px;padding:5px 14px">Open</button>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:14px;padding:14px 18px 18px;flex:1;min-height:0">
@@ -6054,8 +6059,8 @@ async function doCreateMap(){
 // ═══════════════════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════════════════
-const PAGE_TITLES={map:'Maps',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office',incidents:'Incidents',runbooks:'Runbooks',sla:'SLA Dashboard',workflows:'Workflows',watchlist:'Proactive Watchlist',escalations:'Escalations',changes:'Change Calendar','alert-rules':'Alert Rules Engine',sites:'Zabbix Sites','observability-grafana':'Grafana Live','observability-zabbix':'Zabbix Live','observability-kuma':'Kuma Status',observability:'Observability Hub'};
-const PAGE_ALIASES={'observability-grafana':'observability','observability-zabbix':'observability','observability-kuma':'observability'};
+const PAGE_TITLES={map:'Maps',alarms:'Active Alarms',hosts:'Hosts',intel:'AI Network Intelligence',settings:'Settings',hreality:'Host Reality Management',office:'AI Employees Office',incidents:'Incidents',runbooks:'Runbooks',sla:'SLA Dashboard',workflows:'Workflows',watchlist:'Proactive Watchlist',escalations:'Escalations',changes:'Change Calendar','alert-rules':'Alert Rules Engine',sites:'Zabbix Sites','observability-summary':'Monitoring Home','observability-grafana':'Grafana Live','observability-zabbix':'Zabbix Live','observability-kuma':'Kuma Status',observability:'Observability Hub'};
+const PAGE_ALIASES={'observability-summary':'observability','observability-grafana':'observability','observability-zabbix':'observability','observability-kuma':'observability'};
 function openDashboardPage(target){
   const pageKey = `observability-${target}`;
   navigate(pageKey);
@@ -6169,7 +6174,7 @@ function showToast(message, tone = 'info') {
   }, 2600);
 }
 
-let _obsCurrentTarget = 'grafana';
+let _obsCurrentTarget = 'summary';
 let _obsRefreshTimer = null;
 
 function obsDefaults(){
@@ -6230,7 +6235,9 @@ function obsShowFrameOverlay(title, detail, tone='warn'){
 function obsSetHint(target){
   const hint = document.getElementById('obs-hint');
   if(!hint) return;
-  if(target === 'grafana'){
+  if(target === 'summary'){
+    hint.innerHTML = 'Monitoring Home correlates Zabbix alarms, Grafana API signals, and Kuma public status. Use this as the central NOC view, then pivot into a source tab only when you need a deeper drill-down.';
+  }else if(target === 'grafana'){
     hint.innerHTML = 'Grafana may stay blank until <b style="color:#fff">allow_embedding = true</b> is enabled upstream. The URL field is saved locally, so you can point this to a shared dashboard or kiosk link.';
   }else if(target === 'zabbix'){
     hint.innerHTML = 'Zabbix web dashboards can block framing depending on upstream headers. If this view stays blank, use <b style="color:#fff">Open</b> or expose an embeddable dashboard route upstream.';
@@ -6251,7 +6258,7 @@ function obsUrlWithBust(url){
 }
 
 function obsUpdateButtons(){
-  ['grafana','zabbix','kuma'].forEach(target => {
+  ['summary','grafana','zabbix','kuma'].forEach(target => {
     const btn = document.getElementById(`obs-tab-${target}`);
     if(btn) btn.classList.toggle('active', target === _obsCurrentTarget);
   });
@@ -6264,17 +6271,33 @@ function obsSelectTarget(target){
   const pageTitle = document.getElementById('page-title');
   if(pageTitle) pageTitle.textContent = PAGE_TITLES[pageKey] || PAGE_TITLES.observability;
   document.querySelectorAll('.nav-item[data-page]').forEach(n => n.classList.toggle('active', n.dataset.page === pageKey));
-  const titles = {grafana:'Grafana Live View', zabbix:'Zabbix Live View', kuma:'Kuma Status View'};
+  const titles = {summary:'Monitoring Home', grafana:'Grafana Live View', zabbix:'Zabbix Live View', kuma:'Kuma Status View'};
   const titleEl = document.getElementById('obs-frame-title');
   if(titleEl) titleEl.textContent = titles[target] || 'Observability Workspace';
   const input = document.getElementById('obs-url');
-  if(input) input.value = obsGetUrl(target);
+  const urlWrap = document.getElementById('obs-url-wrap');
+  const saveBtn = document.getElementById('obs-save-btn');
+  const openBtn = document.getElementById('obs-open-btn');
+  const reloadBtn = document.getElementById('obs-reload-btn');
+  const summaryMode = target === 'summary';
+  if(urlWrap) urlWrap.style.display = summaryMode ? 'none' : '';
+  if(saveBtn) saveBtn.style.display = summaryMode ? 'none' : '';
+  if(openBtn) openBtn.style.display = summaryMode ? 'none' : '';
+  if(reloadBtn) reloadBtn.textContent = summaryMode ? 'Refresh' : 'Reload';
+  if(input){
+    input.disabled = summaryMode;
+    input.value = summaryMode ? '' : obsGetUrl(target);
+  }
   obsSetHint(target);
   obsLoadFrame(false);
   loadObservabilityPulse();
 }
 
 function obsSaveUrl(){
+  if(_obsCurrentTarget === 'summary'){
+    showToast('Monitoring Home does not use a dashboard URL.', 'warn');
+    return;
+  }
   const input = document.getElementById('obs-url');
   if(!input) return;
   const url = input.value.trim();
@@ -6287,6 +6310,10 @@ function obsSaveUrl(){
 }
 
 function obsOpenExternal(){
+  if(_obsCurrentTarget === 'summary'){
+    showToast('Use a specific source tab to open an external dashboard.', 'warn');
+    return;
+  }
   const input = document.getElementById('obs-url');
   const url = (input?.value || '').trim() || obsGetUrl(_obsCurrentTarget);
   if(!url){ showToast('No URL configured for this dashboard.', 'warn'); return; }
@@ -6297,6 +6324,18 @@ async function obsLoadFrame(forceReload=false){
   const frame = document.getElementById('obs-frame');
   const input = document.getElementById('obs-url');
   if(!frame || !input) return;
+  if(_obsCurrentTarget === 'summary'){
+    if(typeof window.renderObservabilityHomeBoard === 'function'){
+      const rendered = await window.renderObservabilityHomeBoard();
+      if(rendered){
+        obsSetStatus('Monitoring Home is showing the unified observability board.', 'Centralized view');
+        return;
+      }
+    }
+    obsShowFrameOverlay('Monitoring Home Unavailable', 'The app could not build the centralized monitoring board right now.', 'error');
+    obsSetStatus('Central monitoring board could not be rendered.', 'Centralized view');
+    return;
+  }
   const rawUrl = input.value.trim() || obsGetUrl(_obsCurrentTarget);
   if(!rawUrl){
     frame.removeAttribute('src');
@@ -6339,6 +6378,16 @@ async function obsLoadFrame(forceReload=false){
     );
     obsSetStatus(preflightMsg || 'Dashboard check failed.', meta);
     return;
+  }
+  if(
+    (preflight.requires_login || preflight.client_frame_bust || preflight.frame_allowed === false) &&
+    typeof window.renderObservabilitySmartFallback === 'function'
+  ){
+    const rendered = await window.renderObservabilitySmartFallback(_obsCurrentTarget, meta, preflight);
+    if(rendered){
+      obsSetStatus(`${_obsCurrentTarget.toUpperCase()} is shown in smart summary mode.`, meta);
+      return;
+    }
   }
   if(preflight.requires_login){
     const authNote = preflight.auth_used
@@ -6389,7 +6438,7 @@ async function obsLoadFrame(forceReload=false){
 async function loadObservabilityPulse(){
   const panel = document.getElementById('obs-pulse');
   if(!panel) return;
-  panel.textContent = 'Loading operational context...';
+  panel.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:4px 0">Loading operational context...</div>';
   const approvalReq = (typeof S !== 'undefined' && S.myRole === 'viewer')
     ? Promise.resolve([])
     : api('/api/workflows/approvals');
@@ -6407,7 +6456,7 @@ async function loadObservabilityPulse(){
     ? S.allProblems.length
     : (parseInt(document.getElementById('sc-prob')?.textContent || '0', 10) || 0);
 
-  let recommendation = 'System stable. Use this workspace for trend review and rapid pivots between tools.';
+  let recommendation = 'System stable. Use this workspace as the primary cross-tool monitoring surface.';
   let accent = '#4ade80';
   if(approvalCount > 0){
     recommendation = `${approvalCount} workflow action(s) are waiting for operator approval. Clear these first so automation does not stall.`;
@@ -6424,33 +6473,27 @@ async function loadObservabilityPulse(){
   }
 
   panel.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-      <div>
-        <div style="font-size:12px;font-weight:700;color:var(--text)">Ops Pulse</div>
-        <div style="margin-top:4px">A quick heuristic view of what deserves attention before you dive into dashboards.</div>
+    <div style="border:1px solid rgba(255,255,255,0.06);border-radius:12px;overflow:hidden;background:rgba(7,12,22,0.72)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#fff">Operations Summary</div>
+          <div style="margin-top:3px;font-size:10px;color:var(--muted)">Central health view for Zabbix, Grafana, Kuma, approvals, and automation readiness.</div>
+        </div>
+        <div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:${accent}">${_obsCurrentTarget.toUpperCase()}</div>
       </div>
-      <div style="font-size:18px;font-weight:700;color:${accent}">${_obsCurrentTarget.toUpperCase()}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px">
-      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Active Problems</div>
-        <div style="font-size:16px;font-weight:700;color:${activeProblems ? '#f87171' : '#4ade80'};margin-top:4px">${activeProblems}</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div style="font-size:10px;color:var(--muted)">Active Problems</div>
+        <div style="font-size:12px;font-weight:700;color:${activeProblems ? '#f87171' : '#4ade80'}">${activeProblems}</div>
+        <div style="font-size:10px;color:var(--muted)">Pending Approvals</div>
+        <div style="font-size:12px;font-weight:700;color:${approvalCount ? '#fbbf24' : '#4ade80'}">${approvalCount}</div>
+        <div style="font-size:10px;color:var(--muted)">Runbook Coverage</div>
+        <div style="font-size:12px;font-weight:700;color:${coveragePct >= 80 ? '#4ade80' : '#60a5fa'}">${coveragePct.toFixed(1)}%</div>
+        <div style="font-size:10px;color:var(--muted)">Workflow Worker</div>
+        <div style="font-size:12px;font-weight:700;color:${worker === 'ok' || worker === 'running' ? '#4ade80' : '#f97316'}">${esc(worker)}</div>
       </div>
-      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Pending Approvals</div>
-        <div style="font-size:16px;font-weight:700;color:${approvalCount ? '#fbbf24' : '#4ade80'};margin-top:4px">${approvalCount}</div>
+      <div style="padding:12px 14px;color:#dbe8fb;font-size:11px;line-height:1.7">
+        ${esc(recommendation)}
       </div>
-      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Runbook Coverage</div>
-        <div style="font-size:16px;font-weight:700;color:${coveragePct >= 80 ? '#4ade80' : '#60a5fa'};margin-top:4px">${coveragePct.toFixed(1)}%</div>
-      </div>
-      <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;background:rgba(255,255,255,0.02)">
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)">Workflow Worker</div>
-        <div style="font-size:16px;font-weight:700;color:${worker === 'ok' || worker === 'running' ? '#4ade80' : '#f97316'};margin-top:4px">${esc(worker)}</div>
-      </div>
-    </div>
-    <div style="margin-top:12px;padding:10px;border-radius:10px;border:1px solid ${accent}33;background:${accent === '#4ade80' ? 'rgba(74,222,128,0.08)' : accent === '#fbbf24' ? 'rgba(251,191,36,0.08)' : accent === '#f87171' ? 'rgba(248,113,113,0.08)' : 'rgba(96,165,250,0.08)'};color:#e5eefc;line-height:1.6">
-      ${esc(recommendation)}
     </div>
   `;
 }
@@ -6460,7 +6503,7 @@ async function loadObservability(pageKey){
     await loadObservabilityConfig();
   }
   const requested = (pageKey || '').startsWith('observability-') ? pageKey.substring('observability-'.length) : _obsCurrentTarget;
-  obsSelectTarget(requested || 'grafana');
+  obsSelectTarget(requested || 'summary');
   if(_obsRefreshTimer) clearInterval(_obsRefreshTimer);
   _obsRefreshTimer = setInterval(() => {
     const activePage = document.querySelector('.page.active');
@@ -6491,7 +6534,7 @@ async function doLogin(){
     if(r?.ok){
       document.getElementById('login-overlay').style.display='none';
       e.textContent='';
-      init();
+      await init();
     } else {
       e.textContent=r?.error||'Invalid credentials';
       document.getElementById('l-pass').value='';
@@ -7473,6 +7516,7 @@ async function init(){
   initTrafficCanvas();
   visNetwork.once('stabilized',()=>visNetwork.fit({animation:{duration:700}}));
   window.addEventListener('resize',()=>{ visNetwork.fit(); resizeTrafficCanvas(); });
+  navigate('observability-summary');
   dismissSplash('SYSTEM READY');
 }
 
@@ -9861,6 +9905,8 @@ async function officeRunTask(empId, taskType, customTask='') {
   let accumulated = '';
   let xhrPos = 0;
   let gotFirstChunk = false;
+  let sawStreamError = false;
+  let streamErrorText = '';
 
   OFFICE_STATE._xhr = OFFICE_STATE._xhr || {};
   const xhr = new XMLHttpRequest();
@@ -9883,8 +9929,12 @@ async function officeRunTask(empId, taskType, customTask='') {
       try {
         const ev = JSON.parse(raw);
         if (ev.error) {
+          sawStreamError = true;
+          streamErrorText = String(ev.error || 'Unknown AI error');
+          const st = document.getElementById(`emp-${empId}-status`);
+          if (st) { st.textContent = 'Request failed.'; st.style.color = '#f87171'; }
           const od = document.getElementById(`emp-${empId}-output`);
-          if (od) od.textContent = '[ERROR] ' + ev.error;
+          if (od) od.textContent = '[ERROR] ' + streamErrorText;
           return;
         }
         if (ev.t) {
@@ -9914,10 +9964,19 @@ async function officeRunTask(empId, taskType, customTask='') {
 
   xhr.onload = function() {
     _processChunk(xhr.responseText.slice(xhrPos));
+    delete OFFICE_STATE._xhr[empId];
     if (!OFFICE_STATE.activeEmp.has(empId)) return;
     if (xhr.status !== 200) {
       const od = document.getElementById(`emp-${empId}-output`);
       if (od) od.textContent = `[HTTP ${xhr.status}] Server error:\n${xhr.responseText.slice(0,400)}`;
+      _errorEmpTask(empId, emp);
+    } else if (sawStreamError) {
+      _errorEmpTask(empId, emp);
+    } else if (!gotFirstChunk && !accumulated.trim()) {
+      const st = document.getElementById(`emp-${empId}-status`);
+      if (st) { st.textContent = 'Request failed.'; st.style.color = '#f87171'; }
+      const od = document.getElementById(`emp-${empId}-output`);
+      if (od) od.textContent = '[ERROR] Empty response from AI provider or aborted stream.';
       _errorEmpTask(empId, emp);
     } else {
       _finishEmpTask(empId, emp, accumulated, taskType);
@@ -9925,6 +9984,7 @@ async function officeRunTask(empId, taskType, customTask='') {
   };
 
   xhr.onerror = function() {
+    delete OFFICE_STATE._xhr[empId];
     if (!OFFICE_STATE.activeEmp.has(empId)) return;
     const od = document.getElementById(`emp-${empId}-output`);
     if (od) od.textContent = '[NETWORK ERROR] Could not reach /api/office/run';
@@ -9932,6 +9992,7 @@ async function officeRunTask(empId, taskType, customTask='') {
   };
 
   xhr.ontimeout = function() {
+    delete OFFICE_STATE._xhr[empId];
     if (!OFFICE_STATE.activeEmp.has(empId)) return;
     const od = document.getElementById(`emp-${empId}-output`);
     if (od) od.textContent = '[TIMEOUT] No response after 120s — check AI provider key';
@@ -9959,12 +10020,15 @@ async function _finishEmpTask(empId, emp, output, taskType='custom') {
   const stop = document.getElementById(`emp-${empId}-stop`);
   const card = document.getElementById(`emp-${empId}`);
   const idle = document.getElementById(`emp-${empId}-idle`);
+  const statusEl = document.getElementById(`emp-${empId}-status`);
 
   if (tag)  { tag.textContent='DONE'; tag.className='emp-tag done'; setTimeout(()=>{ if(tag){tag.textContent='IDLE';tag.className='emp-tag idle';} },4000); }
   if (dot)  { dot.className='emp-status-dot done'; setTimeout(()=>{ if(dot) dot.className='emp-status-dot idle'; },4000); }
   if (stop) stop.style.display = 'none';
   if (card) card.classList.remove('emp-card-active');
   if (idle) { idle.textContent='Task complete.'; setTimeout(()=>{ if(idle && !OFFICE_STATE.activeEmp.has(empId)) idle.textContent='Idle — waiting for next task...'; },4000); }
+
+  if (statusEl) { statusEl.textContent = 'Completed.'; statusEl.style.color = '#4ade80'; }
 
   // Save exchange to conversation history
   if (output && output.length > 10) {
@@ -10061,10 +10125,12 @@ function _errorEmpTask(empId, emp) {
   const stop = document.getElementById(`emp-${empId}-stop`);
   const card = document.getElementById(`emp-${empId}`);
   const idle = document.getElementById(`emp-${empId}-idle`);
+  const statusEl = document.getElementById(`emp-${empId}-status`);
   if (tag)  { tag.textContent='ERROR'; tag.className='emp-tag'; tag.style.cssText='color:#ff4444;border-color:rgba(255,68,68,0.4);background:rgba(255,68,68,0.08)'; setTimeout(()=>{ if(tag){tag.textContent='IDLE';tag.className='emp-tag idle';tag.style.cssText='';} },5000); }
   if (dot)  { dot.className='emp-status-dot'; dot.style.background='#ff4444'; setTimeout(()=>{ if(dot){dot.className='emp-status-dot idle';dot.style.background='';} },5000); }
   if (stop) stop.style.display = 'none';
   if (card) card.classList.remove('emp-card-active');
+  if (statusEl) { statusEl.textContent = 'Request failed.'; statusEl.style.color = '#f87171'; }
   if (idle) idle.textContent = 'Error — check AI provider key in Settings';
   _addFeedItem(empId, 'Task failed — check AI provider settings', '#ff4444');
 }
@@ -10366,8 +10432,11 @@ function initWebSessionBookmarklets() {
     '(function(){',
     'fetch("/api/auth/session").then(function(r){return r.json()}).then(function(d){',
     '  var t=d.accessToken;',
+    '  var did = localStorage.getItem("oai-did") || localStorage.getItem("oai/device/id") || "";',
+    '  var bundle = {access_token:t||"", device_id:did||"", cookies:document.cookie||""};',
     '  if(t){',
-    '    window.open("' + base + '/api/import/capture-web-session?provider=chatgpt_web&token="+encodeURIComponent(t),"_noc_cap","width=440,height=280,scrollbars=no,resizable=no");',
+    '    var packed = btoa(JSON.stringify(bundle)).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");',
+    '    window.open("' + base + '/api/import/capture-web-session?provider=chatgpt_web&token="+encodeURIComponent(t)+"&bundle="+encodeURIComponent(packed),"_noc_cap","width=440,height=280,scrollbars=no,resizable=no");',
     '  } else {',
     '    alert("Access token not found.\\nMake sure you are logged in to ChatGPT Plus.");',
     '  }',
@@ -12637,7 +12706,7 @@ async function zbxSelectScript(idx){
   </div>
 </div>
 
-<script src="/static/js/app_shell.js"></script>
+<script src="/static/js/app_shell.js?v=20260303e"></script>
 
 </body>
 </html>

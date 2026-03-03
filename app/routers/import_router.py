@@ -188,6 +188,13 @@ async def get_ai_keys(session: dict = Depends(get_session)):
     def mask_session(k):
         """Mask a long session token showing first 12 and last 6 chars."""
         k = k or ""
+        if isinstance(k, str) and k.startswith("{"):
+            try:
+                parsed = json.loads(k)
+                if isinstance(parsed, dict):
+                    k = str(parsed.get("access_token") or parsed.get("token") or "")
+            except Exception:
+                pass
         return (k[:12] + "*" * 16 + k[-6:]) if len(k) > 18 else ("*" * len(k) if k else "")
 
     ollama = cfg.get("ollama_url") or "http://localhost:11434"
@@ -307,6 +314,7 @@ def _capture_html(status: str, title: str, subtitle: str, provider: str = "") ->
 async def capture_web_session(
     provider: str = Query(...),
     token:    str = Query(...),
+    bundle:   str | None = Query(None),
     session:  dict = Depends(get_session),   # must be logged in to NOC Sentinel
 ):
     """
@@ -319,6 +327,22 @@ async def capture_web_session(
     token = (token or "").strip()
     if len(token) < 8:
         return HTMLResponse(_capture_html("error", "Token too short", "The captured token appears invalid. Try again."))
+
+    if provider == "chatgpt_web" and bundle:
+        try:
+            decoded = base64.urlsafe_b64decode((bundle + "===").encode("utf-8"))
+            parsed = json.loads(decoded.decode("utf-8"))
+            if isinstance(parsed, dict):
+                token = json.dumps(
+                    {
+                        "access_token": str(parsed.get("access_token") or token),
+                        "device_id": str(parsed.get("device_id") or ""),
+                        "cookies": str(parsed.get("cookies") or ""),
+                    },
+                    ensure_ascii=False,
+                )
+        except Exception:
+            pass
 
     field  = "claude_web_session" if provider == "claude_web" else "chatgpt_web_token"
     label  = "Claude.ai" if provider == "claude_web" else "ChatGPT"

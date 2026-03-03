@@ -9,6 +9,7 @@ Features:
 """
 import json
 import base64
+import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
@@ -18,8 +19,8 @@ from typing import Optional, List, Any, Literal
 from app.config import settings
 from app.deps import get_session, require_admin, require_operator
 from app.database import fetch_one, fetch_all, execute
-from app.services.ai_provider import resolve_runtime_ai
-from app.services.ai_stream import extract_text_chunk, stream_ai
+from app.services.ai_provider import provider_candidates, resolve_runtime_ai
+from app.services.ai_stream import extract_error_chunk, extract_text_chunk, stream_ai
 from app.services.doc_extract import extract_doc_text
 from app.services.memory import get_memory_context, save_memory, get_memories
 from app.services.employee_prompt import (
@@ -36,6 +37,7 @@ from app.services.employee_context import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 SEV_LABELS = {0: "Info", 1: "Info", 2: "Warning", 3: "Average", 4: "High", 5: "Disaster"}
 
@@ -282,6 +284,12 @@ async def run_task(body: RunTaskBody, session: dict = Depends(get_session)):
     )
     if not api_key and provider != "ollama":
         raise HTTPException(400, f"{provider} API key not configured — go to Settings → AI Providers")
+    candidates = provider_candidates(
+        cfg,
+        requested_provider,
+        requested_model,
+        fallback_provider=cfg.get("default_ai_provider") or "claude",
+    ) or [(provider, model, api_key)]
 
     # Load employee profile + assemble system prompt from structured instructions
     profile = await fetch_one("SELECT * FROM employee_profiles WHERE id=%s", (employee,)) or {}
@@ -413,18 +421,54 @@ async def run_task(body: RunTaskBody, session: dict = Depends(get_session)):
     full_response_parts = []
 
     async def sse_generator():
-        async for chunk in stream_ai(provider, api_key, model, system_prompt, user_msg, image_att, history_messages):
-            event = chunk.get("event", "message")
-            data  = chunk.get("data", "{}")
-            # Collect text for memory
-            if event == "message":
-                try:
-                    full_response_parts.append(json.loads(data).get("t", ""))
-                except Exception:
-                    pass
-                yield f"data: {data}\n\n"
-            else:
+        active_provider = provider
+        active_model = model
+        active_api_key = api_key
+        attempt_errors: list[str] = []
+
+        for cand_provider, cand_model, cand_api_key in candidates:
+            active_provider = cand_provider
+            active_model = cand_model
+            active_api_key = cand_api_key
+            attempt_had_text = False
+            first_error = ""
+
+            async for chunk in stream_ai(cand_provider, cand_api_key, cand_model, system_prompt, user_msg, image_att, history_messages):
+                event = chunk.get("event", "message")
+                data  = chunk.get("data", "{}")
+                if event == "message":
+                    text = extract_text_chunk(chunk)
+                    if text:
+                        attempt_had_text = True
+                        full_response_parts.append(text)
+                    yield f"data: {data}\n\n"
+                    continue
+                if event == "done":
+                    continue
+                if event == "error":
+                    if attempt_had_text:
+                        yield f"event: {event}\ndata: {data}\n\n"
+                        break
+                    if not first_error:
+                        first_error = extract_error_chunk(chunk) or "provider returned an error"
+                    continue
                 yield f"event: {event}\ndata: {data}\n\n"
+
+            if attempt_had_text:
+                break
+
+            if first_error:
+                attempt_errors.append(f"{cand_provider}: {first_error}")
+                logger.warning("Office AI provider %s failed, trying fallback.", cand_provider)
+            else:
+                attempt_errors.append(f"{cand_provider}: returned no text")
+        else:
+            error_msg = "All AI providers failed"
+            if attempt_errors:
+                error_msg += ": " + " | ".join(attempt_errors[:3])
+            yield f"event: error\ndata: {json.dumps({'error': error_msg})}\n\n"
+            return
+
         # After stream completes, save memory asynchronously
         import asyncio
         full_response = "".join(full_response_parts)
@@ -433,9 +477,9 @@ async def run_task(body: RunTaskBody, session: dict = Depends(get_session)):
             task_type=task_type,
             task_prompt=task_prompt,
             ai_response=full_response,
-            api_key=api_key,
-            provider=provider,
-            model=model,
+            api_key=active_api_key,
+            provider=active_provider,
+            model=active_model,
         ))
 
     return StreamingResponse(
@@ -483,6 +527,12 @@ async def run_task_sync(body: RunSyncBody):
     )
     if not api_key and provider != "ollama":
         raise HTTPException(400, f"{provider} API key not configured")
+    candidates = provider_candidates(
+        cfg,
+        requested_provider,
+        requested_model,
+        fallback_provider=cfg.get("default_ai_provider") or "claude",
+    ) or [(provider, model, api_key)]
 
     persona = await build_employee_system_prompt(employee) or DEFAULT_PERSONAS[employee]
 
@@ -529,19 +579,41 @@ async def run_task_sync(body: RunSyncBody):
 
     # Collect full response from streaming generator
     parts = []
-    async for chunk in stream_ai(provider, api_key, model, system_prompt, task_prompt, [], history_messages):
-        event = chunk.get("event", "message")
-        if event == "done":
+    active_provider = provider
+    active_model = model
+    active_api_key = api_key
+    attempt_errors: list[str] = []
+
+    for cand_provider, cand_model, cand_api_key in candidates:
+        active_provider = cand_provider
+        active_model = cand_model
+        active_api_key = cand_api_key
+        first_error = ""
+        parts = []
+        async for chunk in stream_ai(cand_provider, cand_api_key, cand_model, system_prompt, task_prompt, [], history_messages):
+            event = chunk.get("event", "message")
+            if event == "done":
+                break
+            if event in ("message", ""):
+                text = extract_text_chunk(chunk)
+                if text:
+                    parts.append(text)
+                continue
+            if event == "error" and not first_error:
+                first_error = extract_error_chunk(chunk) or "provider returned an error"
+
+        if parts:
             break
-        if event in ("message", ""):
-            try:
-                t = json.loads(chunk.get("data", "{}")).get("t", "")
-                if t:
-                    parts.append(t)
-            except Exception:
-                pass
+
+        if first_error:
+            attempt_errors.append(f"{cand_provider}: {first_error}")
+            logger.warning("Office AI provider %s failed in sync mode, trying fallback.", cand_provider)
+        else:
+            attempt_errors.append(f"{cand_provider}: returned no text")
 
     response_text = "".join(parts)
+    if not response_text.strip():
+        raise HTTPException(502, "All AI providers failed: " + " | ".join(attempt_errors[:3]))
 
     # Save memory async
     import asyncio
@@ -550,9 +622,9 @@ async def run_task_sync(body: RunSyncBody):
         task_type=task_type,
         task_prompt=task_prompt,
         ai_response=response_text,
-        api_key=api_key,
-        provider=provider,
-        model=model,
+        api_key=active_api_key,
+        provider=active_provider,
+        model=active_model,
     ))
 
     return {"ok": True, "employee": employee, "response": response_text}

@@ -7,10 +7,12 @@ from pydantic import BaseModel, Field
 from app.database import execute, fetch_one
 from app.deps import get_session, require_admin, require_operator
 from app.services.observability import (
+    build_monitoring_overview,
     collect_monitoring_snapshot,
     configured_dashboard_hosts,
     credentials_for_url,
     preflight_dashboard_url,
+    sync_kuma_override,
     summarize_monitoring_snapshot,
     target_settings,
     target_settings_for_ui,
@@ -243,6 +245,22 @@ async def get_observability_snapshot(session: dict = Depends(get_session)):
         "snapshot": snapshot,
         "summary": summarize_monitoring_snapshot(snapshot),
     }
+
+
+@router.get("/overview")
+async def get_observability_overview(session: dict = Depends(get_session)):
+    cfg = await _load_cfg()
+    data = await build_monitoring_overview(cfg)
+    data["kuma_sync"] = await sync_kuma_override(cfg, data)
+    return {"ok": True, **data}
+
+
+@router.post("/sync-kuma")
+async def sync_kuma_now(session: dict = Depends(require_operator)):
+    cfg = await _load_cfg()
+    data = await build_monitoring_overview(cfg)
+    result = await sync_kuma_override(cfg, data)
+    return {"ok": result.get("ok", False), "overview": data, "kuma_sync": result}
 
 
 @router.get("/preflight")

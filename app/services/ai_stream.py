@@ -483,6 +483,17 @@ async def stream_chatgpt_web(
     """
     images  = images  or []
     history = history or []
+    bundle: dict = {}
+    token_value = str(access_token or "").strip()
+    if token_value.startswith("{"):
+        try:
+            parsed = json.loads(token_value)
+            if isinstance(parsed, dict):
+                bundle = parsed
+                token_value = str(parsed.get("access_token") or parsed.get("token") or "").strip()
+        except Exception:
+            bundle = {}
+    access_token = token_value
 
     if not access_token or len(access_token) < 20:
         yield _sse_error("ChatGPT web token not set — go to Settings → AI Providers → ChatGPT Web")
@@ -495,7 +506,16 @@ async def stream_chatgpt_web(
         "User-Agent":    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Origin":        "https://chatgpt.com",
         "Referer":       "https://chatgpt.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
     }
+    device_id = str(bundle.get("device_id") or "").strip()
+    cookies = str(bundle.get("cookies") or "").strip()
+    if device_id:
+        headers["oai-device-id"] = device_id
+    if cookies:
+        headers["Cookie"] = cookies
 
     messages = []
     for m in (history or [])[-8:]:
@@ -532,8 +552,19 @@ async def stream_chatgpt_web(
                 headers=headers,
                 json=payload,
             ) as resp:
-                if resp.status_code in (401, 403):
+                if resp.status_code == 401:
                     yield _sse_error("ChatGPT session expired — please refresh your access token in Settings")
+                    return
+                if resp.status_code == 403:
+                    body = await resp.aread()
+                    snippet = body.decode(errors="ignore")[:200]
+                    if "<html" in snippet.lower():
+                        yield _sse_error(
+                            "ChatGPT web is blocking this server session (Cloudflare / browser verification). "
+                            "Recapture the web session from Settings so NOC Sentinel stores token + browser bundle."
+                        )
+                    else:
+                        yield _sse_error(f"ChatGPT web blocked the request: {snippet}")
                     return
                 if resp.status_code == 429:
                     yield _sse_error("ChatGPT rate limit reached — please wait a moment and try again")
