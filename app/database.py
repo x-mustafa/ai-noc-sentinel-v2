@@ -339,6 +339,19 @@ async def run_migration():
         # Web-session providers (use Claude Pro / ChatGPT Plus subscription — no API billing)
         "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `claude_web_session`  TEXT DEFAULT NULL",
         "ALTER TABLE `zabbix_config` ADD COLUMN IF NOT EXISTS `chatgpt_web_token`   TEXT DEFAULT NULL",
+
+        # Audit log — every write action by any user
+        """CREATE TABLE IF NOT EXISTS `audit_log` (
+            `id`          INT AUTO_INCREMENT PRIMARY KEY,
+            `user_id`     VARCHAR(100) NOT NULL,
+            `method`      VARCHAR(10)  NOT NULL,
+            `path`        VARCHAR(500) NOT NULL,
+            `ip`          VARCHAR(45)  DEFAULT '',
+            `status_code` SMALLINT     DEFAULT 0,
+            `created_at`  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_al_user` (`user_id`, `created_at`),
+            INDEX `idx_al_time` (`created_at`)
+        ) ENGINE=InnoDB""",
     ]
     for sql in sqls:
         try:

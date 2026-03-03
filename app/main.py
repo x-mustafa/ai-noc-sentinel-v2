@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting NOC Sentinel Python backend...")
+    # License check — runs before anything else
+    from app.license_check import check_license
+    check_license()
+    logger.info("License verified.")
     await run_migration()
     logger.info("DB migrations done.")
     await start_engine()
@@ -41,6 +45,41 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# ── Audit log middleware ───────────────────────────────────────────────────────
+_AUDIT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_AUDIT_SKIP_PREFIXES = ("/api/auth/session", "/api/health")
+
+class AuditLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        method = request.method
+        path   = request.url.path
+        if method in _AUDIT_METHODS and not any(path.startswith(p) for p in _AUDIT_SKIP_PREFIXES):
+            try:
+                session  = request.session if hasattr(request, "session") else {}
+                user_id  = session.get("username") or session.get("user_id") or "anonymous"
+                ip       = (request.headers.get("X-Forwarded-For") or
+                            request.headers.get("X-Real-IP") or
+                            (request.client.host if request.client else "unknown"))
+                import asyncio
+                asyncio.create_task(_write_audit(user_id, method, path, ip, response.status_code))
+            except Exception:
+                pass
+        return response
+
+
+async def _write_audit(user_id: str, method: str, path: str, ip: str, status: int):
+    try:
+        from app.database import execute
+        await execute(
+            "INSERT INTO audit_log (user_id, method, path, ip, status_code) VALUES (%s,%s,%s,%s,%s)",
+            (user_id, method, path, ip, status),
+        )
+    except Exception:
+        pass  # never let audit failure break the request
+
+app.add_middleware(AuditLogMiddleware)
 
 app.add_middleware(
     SessionMiddleware,

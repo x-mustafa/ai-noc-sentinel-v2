@@ -34,3 +34,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# License & protection (never commit)
+license.lic
+tools/.license_secret
+dist/
+build_protected.sh
