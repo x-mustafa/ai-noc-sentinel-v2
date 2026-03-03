@@ -9,7 +9,7 @@ import os
 
 from app.config import settings
 from app.database import close_pool, run_migration
-from app.routers import auth, zabbix, nodes, users, discover, import_router, chat, office, workflows, vault, ms365, incidents, messages, runbooks, sla
+from app.routers import auth, zabbix, nodes, users, discover, import_router, chat, office, workflows, vault, ms365, incidents, messages, runbooks, sla, watchlist, escalations, changes, nocboard
 from app.services.workflow_engine import start_engine, stop_engine
 
 logging.basicConfig(level=logging.INFO)
@@ -106,7 +106,11 @@ app.include_router(ms365.router,         prefix="/api/ms365",     tags=["ms365"]
 app.include_router(incidents.router,     prefix="/api/incidents", tags=["incidents"])
 app.include_router(messages.router,     prefix="/api/messages",  tags=["messages"])
 app.include_router(runbooks.router,     prefix="/api/runbooks",  tags=["runbooks"])
-app.include_router(sla.router,          prefix="/api/sla",       tags=["sla"])
+app.include_router(sla.router,          prefix="/api/sla",        tags=["sla"])
+app.include_router(watchlist.router,    prefix="/api/office",     tags=["watchlist"])
+app.include_router(escalations.router,  prefix="/api/office",     tags=["escalations"])
+app.include_router(changes.router,      prefix="/api/office",     tags=["changes"])
+app.include_router(nocboard.router,     prefix="/api/office",     tags=["nocboard"])
 
 # ── Health check ───────────────────────────────────────────────────────────────
 @app.get("/api/health", tags=["health"])

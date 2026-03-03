@@ -352,6 +352,68 @@ async def run_migration():
             INDEX `idx_al_user` (`user_id`, `created_at`),
             INDEX `idx_al_time` (`created_at`)
         ) ENGINE=InnoDB""",
+
+        # F7 — Proactive Trend Watch
+        """CREATE TABLE IF NOT EXISTS `watchlist` (
+            `id`           INT AUTO_INCREMENT PRIMARY KEY,
+            `employee_id`  VARCHAR(20) NOT NULL,
+            `host`         VARCHAR(200),
+            `metric_key`   VARCHAR(200),
+            `watch_reason` TEXT,
+            `threshold_pct` INT DEFAULT 80,
+            `added_from`   VARCHAR(100) DEFAULT 'manual',
+            `is_active`    TINYINT(1) DEFAULT 1,
+            `last_checked` TIMESTAMP NULL,
+            `created_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_wl_emp` (`employee_id`, `is_active`)
+        ) ENGINE=InnoDB""",
+
+        # F10 — Escalation Ownership
+        """CREATE TABLE IF NOT EXISTS `escalations` (
+            `id`             INT AUTO_INCREMENT PRIMARY KEY,
+            `incident_id`    INT DEFAULT NULL,
+            `employee_id`    VARCHAR(20) NOT NULL,
+            `escalated_to`   VARCHAR(200) NOT NULL,
+            `channel`        VARCHAR(50) DEFAULT 'teams',
+            `message_sent`   TEXT,
+            `followup_at`    TIMESTAMP NOT NULL,
+            `followup_count` INT DEFAULT 0,
+            `max_followups`  INT DEFAULT 3,
+            `status`         ENUM('open','responded','closed') DEFAULT 'open',
+            `response_note`  TEXT,
+            `created_at`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_esc_emp`    (`employee_id`, `status`),
+            INDEX `idx_esc_timer`  (`followup_at`, `status`)
+        ) ENGINE=InnoDB""",
+
+        # F13 — Change Calendar
+        """CREATE TABLE IF NOT EXISTS `change_calendar` (
+            `id`              INT AUTO_INCREMENT PRIMARY KEY,
+            `title`           VARCHAR(300) NOT NULL,
+            `owner`           VARCHAR(100),
+            `employee_id`     VARCHAR(20),
+            `affected_hosts`  TEXT,
+            `expected_impact` VARCHAR(500),
+            `start_at`        TIMESTAMP NOT NULL,
+            `end_at`          TIMESTAMP NOT NULL,
+            `status`          ENUM('planned','active','completed','cancelled') DEFAULT 'planned',
+            `notes`           TEXT,
+            `created_at`      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_cc_time` (`start_at`, `end_at`, `status`)
+        ) ENGINE=InnoDB""",
+
+        # F11 — Pattern Recognition: tag memory entries with time metadata
+        "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `host`        VARCHAR(200) DEFAULT NULL",
+        "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `alarm_type`  VARCHAR(100) DEFAULT NULL",
+        "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `day_of_week` TINYINT      DEFAULT NULL COMMENT '0=Sun,6=Sat'",
+        "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `hour_of_day` TINYINT      DEFAULT NULL",
+
+        # F9 — Self-Improvement: track last self-review per employee
+        "ALTER TABLE `employee_profiles` ADD COLUMN IF NOT EXISTS `last_self_review` TIMESTAMP NULL",
+
+        # F12 — Weighted feedback on memory entries
+        "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `source` VARCHAR(30) DEFAULT 'auto'",
+        "ALTER TABLE `employee_memory` ADD COLUMN IF NOT EXISTS `weight` TINYINT DEFAULT 1 COMMENT '1=normal,3=correction,5=critical'",
     ]
     for sql in sqls:
         try:

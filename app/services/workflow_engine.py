@@ -36,9 +36,142 @@ async def start_engine():
         return
 
     await _register_scheduled_workflows()
-    sched.add_job(_poll_alarm_workflows, "interval", seconds=30, id="alarm_poll", replace_existing=True)
+    sched.add_job(_poll_alarm_workflows, "interval", seconds=30,  id="alarm_poll",       replace_existing=True)
+    sched.add_job(_watchlist_scan_job,   "interval", hours=4,     id="watchlist_scan",   replace_existing=True)
+    sched.add_job(_escalation_followup,  "interval", minutes=5,   id="esc_followup",     replace_existing=True)
+    sched.add_job(_change_auto_activate, "interval", minutes=5,   id="change_activate",  replace_existing=True)
+    sched.add_job(_self_improvement_job, "cron",     day_of_week="mon", hour=6,           id="self_improve",    replace_existing=True)
     sched.start()
-    logger.info("Workflow engine started.")
+    logger.info("Workflow engine started (alarm poll, watchlist scan, escalation follow-up, change calendar, self-improvement).")
+
+
+async def _watchlist_scan_job():
+    try:
+        from app.routers.watchlist import run_watchlist_scan_all
+        await run_watchlist_scan_all()
+    except Exception as e:
+        logger.error(f"Watchlist scan job error: {e}")
+
+
+async def _escalation_followup():
+    try:
+        from app.routers.escalations import run_escalation_followup
+        await run_escalation_followup()
+    except Exception as e:
+        logger.error(f"Escalation follow-up job error: {e}")
+
+
+async def _change_auto_activate():
+    try:
+        from app.routers.changes import auto_activate_changes
+        await auto_activate_changes()
+    except Exception as e:
+        logger.error(f"Change auto-activate job error: {e}")
+
+
+async def _self_improvement_job():
+    """F9 — Weekly self-improvement review for each employee (runs Monday 06:00)."""
+    try:
+        await _run_self_improvement_all()
+    except Exception as e:
+        logger.error(f"Self-improvement job error: {e}")
+
+
+async def _run_self_improvement_all():
+    """Ask each employee to review their last week and suggest improvements."""
+    from app.database import fetch_one, fetch_all as db_fetch_all, execute as db_exec
+    from app.services.ai_stream import stream_ai
+    from app.services.employee_prompt import build_employee_system_prompt
+
+    cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1")
+    if not cfg:
+        return
+
+    for emp_id in ("aria", "nexus", "cipher", "vega"):
+        try:
+            # Gather last 7 days of data
+            runs = await db_fetch_all(
+                "SELECT w.name, wr.status, wr.outcome, wr.created_at "
+                "FROM workflow_runs wr JOIN workflows w ON wr.workflow_id=w.id "
+                "WHERE w.employee_id=%s AND wr.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
+                "ORDER BY wr.created_at DESC LIMIT 30",
+                (emp_id,),
+            )
+            incidents = await db_fetch_all(
+                "SELECT title, status, severity, started_at FROM incidents "
+                "WHERE owner_id=%s AND started_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 20",
+                (emp_id,),
+            )
+            perf = await db_fetch_all(
+                "SELECT task_type, domain, correct_count, total_count FROM employee_performance "
+                "WHERE employee_id=%s ORDER BY total_count DESC LIMIT 10",
+                (emp_id,),
+            )
+
+            # Summarise data for prompt
+            runs_summary = "\n".join([
+                f"  - {r['name']}: {r['status']} | outcome: {r.get('outcome','unknown')}"
+                for r in runs
+            ]) or "  (no workflow runs this week)"
+
+            incidents_summary = "\n".join([
+                f"  - [{r['severity']}] {r['title']} → {r['status']}"
+                for r in incidents
+            ]) or "  (no incidents this week)"
+
+            perf_summary = "\n".join([
+                f"  - {p['task_type']}/{p['domain']}: "
+                f"{p['correct_count']}/{p['total_count']} correct"
+                for p in perf
+            ]) or "  (no performance data)"
+
+            prompt = (
+                f"You are {emp_id.upper()}. Review your last 7 days of work and suggest improvements.\n\n"
+                f"WORKFLOW RUNS (last 7 days):\n{runs_summary}\n\n"
+                f"INCIDENTS YOU OWNED:\n{incidents_summary}\n\n"
+                f"YOUR ACCURACY STATS:\n{perf_summary}\n\n"
+                f"Based on this data, suggest exactly 5 specific improvements:\n"
+                f"1. A new workflow to automate repeated work\n"
+                f"2. A runbook to write for an unhandled scenario\n"
+                f"3. An instruction update that would make you more accurate\n"
+                f"4. A Zabbix monitoring gap you noticed\n"
+                f"5. One other improvement specific to your role\n\n"
+                f"Be specific. Reference real workflow names, hosts, or patterns you see in the data. "
+                f"No preamble. Start with '1.'"
+            )
+
+            sys_prompt = await build_employee_system_prompt(emp_id)
+            chunks = []
+            async for chunk in stream_ai(
+                cfg.get("provider", "claude"), cfg.get("claude_key", ""),
+                cfg.get("model", "claude-haiku-4-5-20251001"),
+                sys_prompt, prompt,
+            ):
+                if chunk.get("type") == "text":
+                    chunks.append(chunk["text"])
+            report = "".join(chunks).strip()
+
+            # Store as a high-weight memory entry
+            from app.services.memory import save_memory_direct
+            await save_memory_direct(
+                emp_id,
+                task_type="self_improvement",
+                task_summary=f"Weekly self-review — {len(runs)} workflow runs, {len(incidents)} incidents",
+                key_learnings=report[:1000],
+                source="self_review",
+                weight=2,
+            )
+
+            # Update last_self_review timestamp
+            await db_exec(
+                "UPDATE employee_profiles SET last_self_review=NOW() WHERE id=%s",
+                (emp_id,),
+            )
+
+            logger.info(f"[SELF-IMPROVE] {emp_id.upper()} weekly review complete.")
+
+        except Exception as e:
+            logger.error(f"[SELF-IMPROVE] {emp_id} error: {e}")
 
 
 async def stop_engine():

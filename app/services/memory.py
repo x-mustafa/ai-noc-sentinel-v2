@@ -117,24 +117,38 @@ async def save_memory_direct(
     task_type: str,
     task_summary: str,
     key_learnings: str,
+    host: str = None,
+    alarm_type: str = None,
+    source: str = "auto",
+    weight: int = 1,
 ) -> None:
     """
     Save a memory entry without a secondary AI summarisation call.
     Use this for workflow runs, peer messages, and other automated contexts
     where the summary and learnings are already known.
+    F11: auto-tags with day_of_week and hour_of_day for pattern recognition.
     """
     if not task_summary and not key_learnings:
         return
+    from datetime import datetime
+    now = datetime.utcnow()
     try:
         await execute(
             "INSERT INTO employee_memory "
-            "(employee_id, task_type, task_summary, key_learnings) "
-            "VALUES (%s,%s,%s,%s)",
+            "(employee_id, task_type, task_summary, key_learnings, "
+            " host, alarm_type, day_of_week, hour_of_day, source, weight) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (
                 employee_id,
                 task_type,
                 str(task_summary)[:500],
                 str(key_learnings)[:1000],
+                host,
+                alarm_type,
+                now.weekday(),      # 0=Mon, 6=Sun  (Python convention)
+                now.hour,
+                source,
+                weight,
             ),
         )
         # Prune old memories
@@ -146,6 +160,68 @@ async def save_memory_direct(
         )
     except Exception as e:
         logger.warning(f"save_memory_direct({employee_id}) failed: {e}")
+
+
+async def get_pattern_context(employee_id: str, host: str = None, alarm_type: str = None) -> str:
+    """
+    F11 — Pattern Recognition.
+    Returns a formatted string of time-based patterns for this host/alarm type.
+    Injected into prompts when an alarm fires on a known host.
+    """
+    if not host and not alarm_type:
+        return ""
+
+    from datetime import datetime
+    now = datetime.utcnow()
+    dow = now.weekday()
+    hod = now.hour
+
+    params: list = [employee_id]
+    sql = (
+        "SELECT task_summary, key_learnings, day_of_week, hour_of_day, COUNT(*) as occurrences "
+        "FROM employee_memory WHERE employee_id=%s"
+    )
+    if host:
+        sql += " AND host=%s"; params.append(host)
+    if alarm_type:
+        sql += " AND alarm_type=%s"; params.append(alarm_type)
+    sql += " GROUP BY day_of_week, hour_of_day, task_summary, key_learnings ORDER BY occurrences DESC LIMIT 5"
+
+    patterns = await fetch_all(sql, params)
+    if not patterns:
+        return ""
+
+    # Find time-matching patterns (same day of week ±1 or same hour ±2)
+    matched, generic = [], []
+    for p in patterns:
+        p_dow = p.get("day_of_week")
+        p_hod = p.get("hour_of_day")
+        time_match = (
+            (p_dow is not None and abs(p_dow - dow) <= 1) or
+            (p_hod is not None and abs(p_hod - hod) <= 2)
+        )
+        if time_match:
+            matched.append(p)
+        else:
+            generic.append(p)
+
+    lines = []
+    if matched:
+        lines.append("TIME-BASED PATTERNS (you've seen this at similar times before):")
+        for p in matched[:3]:
+            dow_name = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][p["day_of_week"]] if p.get("day_of_week") is not None else "?"
+            lines.append(f"  [{dow_name} ~{p.get('hour_of_day','?')}:00 | {p['occurrences']}x] {p.get('task_summary','')}")
+            if p.get("key_learnings"):
+                lines.append(f"    → {p['key_learnings'][:200]}")
+
+    if generic and not matched:
+        lines.append("KNOWN PATTERNS for this host/alarm:")
+        for p in generic[:2]:
+            lines.append(f"  [{p['occurrences']}x] {p.get('task_summary','')}")
+            if p.get("key_learnings"):
+                lines.append(f"    → {p['key_learnings'][:200]}")
+
+    return "\n".join(lines) if lines else ""
 
 
 async def get_memories(employee_id: str, limit: int = 50) -> list[dict]:

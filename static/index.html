@@ -2264,6 +2264,9 @@ select.form-inp option{background:#0d1628}
       <button class="office-tab" id="otab-history" onclick="switchOfficeTab('history')">
         <i data-lucide="clock" style="width:13px;height:13px"></i> History
       </button>
+      <button class="office-tab" id="otab-nocboard" onclick="switchOfficeTab('nocboard')">
+        <i data-lucide="layout-dashboard" style="width:13px;height:13px"></i> NOC Board
+      </button>
     </div>
 
     <!-- ── Tab: Employees ── -->
@@ -2581,6 +2584,58 @@ select.form-inp option{background:#0d1628}
             Select an employee and click Refresh to view their history.
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── Tab: NOC Board ── -->
+    <div class="office-tab-panel" id="otp-nocboard" style="display:none">
+      <div style="padding:12px 16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)">
+        <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Live NOC Board</span>
+        <span id="noc-board-ts" style="font-size:10px;color:var(--muted);margin-left:auto"></span>
+        <span id="noc-board-status" style="width:7px;height:7px;border-radius:50%;background:#4fc; box-shadow:0 0 5px #4fc;display:inline-block"></span>
+      </div>
+
+      <!-- Summary strip -->
+      <div id="noc-summary-strip" style="display:flex;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px;overflow-y:auto;max-height:calc(100vh - 200px)">
+
+        <!-- Employee Status Grid -->
+        <div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Employee Status</div>
+          <div id="noc-emp-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>
+        </div>
+
+        <!-- Open Incidents -->
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Open Incidents</div>
+          <div id="noc-incidents" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <!-- Active Escalations -->
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Active Escalations</div>
+          <div id="noc-escalations" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <!-- SLA Status -->
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">SLA Status</div>
+          <div id="noc-sla" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <!-- Active Change Windows -->
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Change Windows</div>
+          <div id="noc-changes" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <!-- Recent Workflow Runs -->
+        <div style="grid-column:1/-1">
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Recent Workflow Activity (24h)</div>
+          <div id="noc-runs" style="display:flex;flex-direction:column;gap:5px"></div>
+        </div>
+
       </div>
     </div>
 
@@ -6235,7 +6290,7 @@ function toggleAutoCollab() {
 //  OFFICE PAGE TABS
 // ═══════════════════════════════════════════════════════════
 function switchOfficeTab(tab) {
-  ['employees','teamchat','workflows','vault','whatsapp','m365','history'].forEach(t => {
+  ['employees','teamchat','workflows','vault','whatsapp','m365','history','nocboard'].forEach(t => {
     const panel = document.getElementById(`otp-${t}`);
     if (panel) panel.style.display = t === tab ? '' : 'none';
     const btn = document.getElementById(`otab-${t}`);
@@ -6248,6 +6303,7 @@ function switchOfficeTab(tab) {
   if (tab === 'whatsapp')  loadWAStatus();
   if (tab === 'm365')      loadM365Status();
   if (tab === 'history')   loadEmployeeHistory();
+  if (tab === 'nocboard')  startNocBoard();
 }
 
 function switchOfficeTabAndShowHistory(empId) {
@@ -10142,6 +10198,159 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js').catch(() => {});
   });
 }
+
+// ══════════════════════════════════════════════════════════════════
+// F15 — NOC Board (SSE live board)
+// ══════════════════════════════════════════════════════════════════
+let _nocBoardESS = null;
+
+function startNocBoard() {
+  // Load snapshot immediately then open SSE
+  _fetchNocSnapshot();
+  if (_nocBoardESS) return;  // already streaming
+  _nocBoardESS = new EventSource('/api/office/nocboard/stream');
+  _nocBoardESS.addEventListener('snapshot', e => {
+    try { _renderNocBoard(JSON.parse(e.data)); } catch(err) {}
+  });
+  _nocBoardESS.onerror = () => {
+    document.getElementById('noc-board-status').style.background = '#f66';
+  };
+}
+
+async function _fetchNocSnapshot() {
+  try {
+    const r = await fetch('/api/office/nocboard/snapshot');
+    if (r.ok) _renderNocBoard(await r.json());
+  } catch(e) {}
+}
+
+const _STATUS_COLOR = {
+  available:     '#4fc3f7',
+  busy:          '#ffb74d',
+  investigating: '#ef5350',
+  on_call:       '#ab47bc',
+  off_shift:     '#546e7a',
+};
+const _SEV_COLOR = { 1:'#4fc3f7', 2:'#66bb6a', 3:'#ffa726', 4:'#ef5350', 5:'#b71c1c' };
+
+function _renderNocBoard(data) {
+  const ts = document.getElementById('noc-board-ts');
+  if (ts) ts.textContent = 'Updated ' + new Date(data.ts).toLocaleTimeString();
+
+  // Summary strip
+  const s = data.summary || {};
+  _el('noc-summary-strip').innerHTML = [
+    ['Incidents', s.open_incidents || 0, s.open_incidents > 0 ? '#ef5350' : '#4fc3f7'],
+    ['Escalations', s.open_escalations || 0, s.open_escalations > 0 ? '#ffb74d' : '#4fc3f7'],
+    ['Active Changes', s.active_changes || 0, '#ab47bc'],
+    ['SLA Breached', s.sla_breached || 0, s.sla_breached > 0 ? '#ef5350' : '#4fc3f7'],
+  ].map(([label, val, color]) =>
+    `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;display:flex;flex-direction:column;align-items:center;min-width:80px">
+      <span style="font-size:20px;font-weight:700;color:${color}">${val}</span>
+      <span style="font-size:10px;color:var(--muted);margin-top:2px">${label}</span>
+    </div>`
+  ).join('');
+
+  // Employees
+  _el('noc-emp-grid').innerHTML = (data.employees || []).map(e => {
+    const col = _STATUS_COLOR[e.status] || '#546e7a';
+    return `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:10px;padding:12px;position:relative">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};box-shadow:0 0 6px ${col};flex-shrink:0"></span>
+        <span style="font-size:12px;font-weight:700;color:var(--text)">${e.id.toUpperCase()}</span>
+        ${e.pending_msgs > 0 ? `<span style="font-size:9px;background:#ffb74d;color:#000;border-radius:10px;padding:1px 6px;margin-left:auto">${e.pending_msgs} msg</span>` : ''}
+      </div>
+      <div style="font-size:10px;color:${col};font-weight:600;text-transform:uppercase;letter-spacing:0.5px">${e.status.replace('_',' ')}</div>
+      ${e.current_task ? `<div style="font-size:10px;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_escHtml(e.current_task)}">${_escHtml(e.current_task)}</div>` : ''}
+      ${e.open_incidents > 0 ? `<div style="font-size:10px;color:#ef5350;margin-top:4px">▲ ${e.open_incidents} open incident${e.open_incidents>1?'s':''}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // Incidents
+  _el('noc-incidents').innerHTML = (data.incidents || []).length === 0
+    ? '<div style="font-size:11px;color:var(--muted);padding:8px">No open incidents</div>'
+    : (data.incidents || []).map(i => {
+        const col = _SEV_COLOR[i.severity] || '#4fc3f7';
+        return `<div style="background:rgba(255,255,255,0.02);border-left:3px solid ${col};border-radius:0 6px 6px 0;padding:7px 10px">
+          <div style="font-size:11px;font-weight:600;color:var(--text)">${_escHtml(i.title)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">
+            ${i.owner_id ? i.owner_id.toUpperCase() : '—'} · ${i.status} · sev ${i.severity}
+          </div>
+        </div>`;
+      }).join('');
+
+  // Escalations
+  _el('noc-escalations').innerHTML = (data.escalations || []).length === 0
+    ? '<div style="font-size:11px;color:var(--muted);padding:8px">No open escalations</div>'
+    : (data.escalations || []).map(e =>
+        `<div style="background:rgba(255,255,255,0.02);border-left:3px solid #ffb74d;border-radius:0 6px 6px 0;padding:7px 10px">
+          <div style="font-size:11px;font-weight:600;color:var(--text)">${_escHtml(e.escalated_to)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">
+            ${e.employee_id.toUpperCase()} · ${e.channel} · follow-up #${e.followup_count}
+          </div>
+        </div>`
+      ).join('');
+
+  // SLA
+  _el('noc-sla').innerHTML = (data.sla || []).map(s => {
+    const col = s.health === 'ok' ? '#66bb6a' : '#ef5350';
+    const bar = Math.max(0, Math.min(100, s.budget_remaining_pct));
+    return `<div style="background:rgba(255,255,255,0.02);border-radius:6px;padding:7px 10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:600;color:var(--text)">${s.service}</span>
+        <span style="font-size:10px;color:${col}">${s.actual}%</span>
+      </div>
+      <div style="height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden">
+        <div style="height:100%;width:${bar}%;background:${col};border-radius:2px;transition:width 0.3s"></div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-top:3px">Target ${s.target}% · ${s.downtime_min}m downtime · ${Math.round(bar)}% budget left</div>
+    </div>`;
+  }).join('') || '<div style="font-size:11px;color:var(--muted);padding:8px">No SLA data</div>';
+
+  // Change windows
+  _el('noc-changes').innerHTML = (data.changes || []).length === 0
+    ? '<div style="font-size:11px;color:var(--muted);padding:8px">No active change windows</div>'
+    : (data.changes || []).map(c =>
+        `<div style="background:rgba(171,71,188,0.07);border-left:3px solid #ab47bc;border-radius:0 6px 6px 0;padding:7px 10px">
+          <div style="font-size:11px;font-weight:600;color:var(--text)">${_escHtml(c.title)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">
+            ${c.status.toUpperCase()} · ends ${_fmtTs(c.end_at)}
+            ${c.expected_impact ? ' · ' + _escHtml(c.expected_impact.slice(0,60)) : ''}
+          </div>
+        </div>`
+      ).join('');
+
+  // Workflow runs
+  const STATUS_RUN_COL = { success:'#66bb6a', error:'#ef5350', running:'#ffb74d' };
+  _el('noc-runs').innerHTML = (data.workflow_runs || []).length === 0
+    ? '<div style="font-size:11px;color:var(--muted);padding:8px">No workflow runs in last 24h</div>'
+    : (data.workflow_runs || []).map(r => {
+        const col = STATUS_RUN_COL[r.status] || '#4fc3f7';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:5px 8px;border-radius:5px;background:rgba(255,255,255,0.02)">
+          <span style="width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0"></span>
+          <span style="font-size:11px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(r.name)}</span>
+          <span style="font-size:10px;color:var(--muted)">${r.employee_id ? r.employee_id.toUpperCase() : ''}</span>
+          <span style="font-size:10px;color:${col}">${r.status}</span>
+          ${r.outcome && r.outcome !== 'unknown' ? `<span style="font-size:9px;color:var(--muted)">${r.outcome}</span>` : ''}
+          <span style="font-size:9px;color:var(--muted)">${_fmtTs(r.created_at)}</span>
+        </div>`;
+      }).join('');
+}
+
+function _el(id) {
+  const el = document.getElementById(id);
+  if (!el) return { innerHTML: '' };
+  return el;
+}
+
+function _fmtTs(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  } catch { return ''; }
+}
+
 </script>
 
 <!-- ══ VOICE CALL OVERLAY ══ -->
