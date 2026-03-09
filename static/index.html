@@ -2082,19 +2082,36 @@ select.form-inp option{background:#0d1628}
       <!-- AI Providers -->
       <div class="settings-card">
         <h3><i data-lucide="bot" style="width:14px;height:14px;color:var(--cyan)"></i> AI Providers</h3>
-        <!-- Recommended banner -->
-        <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
-          <span style="font-size:20px;flex-shrink:0">💡</span>
-          <div>
-            <div style="font-size:12px;font-weight:700;color:#00d4ff;margin-bottom:4px">Recommended: Use Your Existing Subscription</div>
-            <div style="font-size:11px;color:#a8d4f5;line-height:1.7">
-              If you have a <strong style="color:#fff">Claude Pro</strong> or <strong style="color:#fff">ChatGPT Plus</strong> subscription, connect it below using the bookmarklet — <strong style="color:#4ade80">no API billing</strong>.<br>
-              Scroll down to <em>Claude Web</em> or <em>ChatGPT Web</em>, drag the bookmark button to your browser bar, then visit that site and click it.
+        <!-- Auto provider banner -->
+        <div style="background:rgba(0,230,118,0.07);border:1px solid rgba(0,230,118,0.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
+          <span style="font-size:20px;flex-shrink:0">⚡</span>
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:700;color:#00e676;margin-bottom:4px">Auto-Configured: Claude Code is Ready</div>
+            <div style="font-size:11px;color:#a8f5c8;line-height:1.7">
+              <strong style="color:#fff">Claude Code</strong> is already installed on this server and authenticated.
+              AI Employees will use it automatically — <strong style="color:#fff">no keys, no billing, no setup required.</strong><br>
+              Just click <strong style="color:#00e676">⭐ Set as Default</strong> on the Claude Code card below to activate it.
             </div>
           </div>
         </div>
         <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Configure API keys for AI Employees. Each employee can also have their own AI engine — set it in the AI Employees page.</p>
         <div class="ai-provider-grid">
+          <!-- Claude Code (auto) -->
+          <div class="ai-provider-card" id="aip-claude-code" style="border-color:rgba(0,230,118,0.35);background:rgba(0,230,118,0.04)">
+            <div class="aip-hdr">
+              <div class="aip-icon" style="background:rgba(0,230,118,0.15)">⚡</div>
+              <div class="aip-name">Claude Code <span style="font-size:9px;color:#00e676;font-weight:700">AUTO</span></div>
+              <span class="aip-badge set" id="aip-claude-code-badge" style="background:rgba(0,230,118,0.15);color:#00e676;border-color:rgba(0,230,118,0.4)">READY</span>
+            </div>
+            <div style="font-size:11px;color:#a8f5c8;line-height:1.6;margin-bottom:8px">
+              Uses the Claude Code CLI installed on this server.<br>
+              <strong style="color:#fff">No API key needed.</strong> Powered by your Claude subscription.
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="aip-hint">claude-sonnet-4-6 (default)</span>
+              <button class="tb-btn" onclick="quickSetDefaultProvider('claude_code')" style="font-size:9px;padding:3px 8px;background:rgba(0,230,118,0.15);border-color:rgba(0,230,118,0.4);color:#00e676">⭐ Set as Default</button>
+            </div>
+          </div>
           <!-- Claude -->
           <div class="ai-provider-card" id="aip-claude">
             <div class="aip-hdr">
@@ -2300,6 +2317,7 @@ select.form-inp option{background:#0d1628}
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
           <label style="font-size:12px;color:var(--text);white-space:nowrap">Default AI for Employees:</label>
           <select id="aip-default-provider" onchange="updateAipModelOptions()" style="background:rgba(9,14,26,0.9);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;color:#e0eaff;font-size:11px;font-family:'Space Grotesk',sans-serif;outline:none">
+            <option value="claude_code">⚡ Claude Code (auto, no key)</option>
             <option value="claude">Claude (Anthropic)</option>
             <option value="openai">OpenAI GPT / Codex</option>
             <option value="gemini">Google Gemini</option>
@@ -10569,6 +10587,7 @@ function _renderAssignFiles() {
 
 // ── ALL PROVIDERS MODEL LISTS ─────────────────────────────────────────────────
 const _ALL_MODELS = {
+  claude_code: ['claude-sonnet-4-6','claude-opus-4-6','claude-haiku-4-5-20251001'],
   claude:      ['claude-sonnet-4-6','claude-opus-4-6','claude-haiku-4-5-20251001'],
   openai:      ['gpt-4o','gpt-4o-mini','o1','o1-mini','o3-mini'],
   gemini:      ['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],
@@ -10584,9 +10603,9 @@ const _ALL_MODELS = {
 };
 
 const _PROVIDER_LABELS = {
-  claude:'Claude (Anthropic)', openai:'OpenAI GPT/Codex', gemini:'Google Gemini',
-  grok:'xAI Grok', openrouter:'OpenRouter', groq:'Groq (free)', deepseek:'DeepSeek',
-  mistral:'Mistral AI', together:'Together.ai', ollama:'Ollama (local)',
+  claude_code:'⚡ Claude Code (auto)', claude:'Claude (Anthropic)', openai:'OpenAI GPT/Codex',
+  gemini:'Google Gemini', grok:'xAI Grok', openrouter:'OpenRouter', groq:'Groq (free)',
+  deepseek:'DeepSeek', mistral:'Mistral AI', together:'Together.ai', ollama:'Ollama (local)',
   claude_web:'Claude Web (subscription)', chatgpt_web:'ChatGPT Web (subscription)',
 };
 
@@ -10741,7 +10760,7 @@ async function quickSetDefaultProvider(provider) {
     body: JSON.stringify({ default_ai_provider: provider }),
   });
   if (r?.ok) {
-    showToast(`Default provider set to ${provider === 'claude_web' ? 'Claude Web' : 'ChatGPT Web'}`, 'success');
+    showToast(`Default provider set to ${_PROVIDER_LABELS[provider] || provider}`, 'success');
     loadAiKeys();
   } else {
     showToast(apiMessage(r, 'Could not update default provider'), 'error');

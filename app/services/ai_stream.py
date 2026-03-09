@@ -1,9 +1,11 @@
 """
 Async multi-provider SSE streaming for AI employees.
-Supports: Claude (Anthropic), OpenAI, Gemini, Grok (xAI), OpenRouter
+Supports: Claude (Anthropic), OpenAI, Gemini, Grok (xAI), OpenRouter, Claude Code CLI
 Each function is an async generator yielding SSE dicts for sse_starlette.
 """
+import asyncio
 import json
+import os
 import uuid as _uuid_lib
 import httpx
 import logging
@@ -607,6 +609,93 @@ async def stream_chatgpt_web(
     yield SSE_DONE
 
 
+_CLAUDE_BIN: str = r"C:\Users\Administrator\AppData\Roaming\npm\claude.cmd"
+
+
+async def stream_claude_code(
+    _key: str, model: str, system: str, user_msg: str,
+    images: list[dict] = None, history: list[dict] = None,
+) -> AsyncGenerator[dict, None]:
+    """Claude Code CLI — uses the claude binary already installed on this machine.
+    No API key required.  Auth comes from the existing Claude Code login.
+    Works because the uvicorn process does NOT have CLAUDECODE=1 set,
+    so there's no nested-session restriction.
+    """
+    history = history or []
+
+    # Build a plain-text prompt: system + conversation history + user message
+    parts: list[str] = []
+    if system:
+        parts.append(system)
+    for m in history[-8:]:
+        role = "Human" if m["role"] == "user" else "Assistant"
+        parts.append(f"{role}: {m['content']}")
+    parts.append(f"Human: {user_msg}")
+    prompt = "\n\n".join(parts)
+
+    # Environment without CLAUDECODE so the CLI doesn't block on nesting
+    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+
+    args = ["cmd", "/c", _CLAUDE_BIN, "-p", prompt, "--output-format", "stream-json", "--verbose"]
+    if model and "claude" in model.lower():
+        args += ["--model", model]
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+
+        yielded_any = False
+        async for raw_line in proc.stdout:
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except Exception:
+                continue
+
+            ev_type = ev.get("type", "")
+            if ev_type == "assistant":
+                for block in ev.get("message", {}).get("content", []):
+                    if block.get("type") == "text" and block.get("text"):
+                        yield _sse_text(block["text"])
+                        yielded_any = True
+            elif ev_type == "content_block_delta":
+                text = ev.get("delta", {}).get("text", "")
+                if text:
+                    yield _sse_text(text)
+                    yielded_any = True
+            elif ev_type == "result":
+                if ev.get("is_error"):
+                    yield _sse_error(str(ev.get("result", "Claude Code returned an error")))
+                    return
+                # If we never got streaming chunks, use the result text directly
+                if not yielded_any:
+                    result_text = str(ev.get("result") or "").strip()
+                    if result_text:
+                        yield _sse_text(result_text)
+
+        await proc.wait()
+        stderr_bytes = await proc.stderr.read()
+        if proc.returncode not in (0, None):
+            err_msg = stderr_bytes.decode("utf-8", errors="replace").strip()[:300]
+            yield _sse_error(f"Claude Code exited {proc.returncode}: {err_msg}")
+            return
+
+    except FileNotFoundError:
+        yield _sse_error(f"Claude Code binary not found at {_CLAUDE_BIN}. Is Claude Code installed?")
+        return
+    except Exception as e:
+        yield _sse_error(f"Claude Code subprocess error: {e}")
+        return
+
+    yield SSE_DONE
+
+
 async def stream_ai(
     provider: str, key: str, model: str, system: str, user_msg: str,
     images: list[dict] = None, history: list[dict] = None
@@ -640,6 +729,8 @@ async def stream_ai(
         gen = stream_claude_web(key, model, system, user_msg, images, history)
     elif provider == "chatgpt_web":
         gen = stream_chatgpt_web(key, model, system, user_msg, images, history)
+    elif provider == "claude_code":
+        gen = stream_claude_code(key, model, system, user_msg, images, history)
     else:
         yield _sse_error(f"Unknown provider: {provider}")
         return

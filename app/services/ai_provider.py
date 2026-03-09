@@ -6,6 +6,7 @@ from typing import Any
 
 
 PROVIDER_KEY_FIELDS: dict[str, str] = {
+    "claude_code": "",           # no key needed — uses local CLI auth
     "claude": "claude_key",
     "openai": "openai_key",
     "gemini": "gemini_key",
@@ -20,8 +21,12 @@ PROVIDER_KEY_FIELDS: dict[str, str] = {
     "chatgpt_web": "chatgpt_web_token",
 }
 
+# Providers that work without any credential configured
+NO_KEY_PROVIDERS: frozenset[str] = frozenset({"ollama", "claude_code"})
+
 
 MODEL_DEFAULTS: dict[str, str] = {
+    "claude_code": "claude-sonnet-4-6",
     "claude": "claude-sonnet-4-6",
     "openai": "gpt-4o",
     "gemini": "gemini-2.0-flash",
@@ -37,6 +42,7 @@ MODEL_DEFAULTS: dict[str, str] = {
 }
 
 FAILOVER_ORDER: tuple[str, ...] = (
+    "claude_code",
     "chatgpt_web",
     "claude_web",
     "openai",
@@ -54,7 +60,7 @@ FAILOVER_ORDER: tuple[str, ...] = (
 
 def normalize_provider(provider: str | None) -> str:
     value = str(provider or "").strip().lower()
-    return value if value in PROVIDER_KEY_FIELDS else "claude"
+    return value if value in PROVIDER_KEY_FIELDS else "claude_code"
 
 
 def provider_credential_field(provider: str | None) -> str:
@@ -97,7 +103,7 @@ def resolve_runtime_ai(
         selected_model = provider_default_model(selected_provider, fallback_provider)
     selected_credential = provider_credential(config, selected_provider)
 
-    if not selected_credential and selected_provider != "ollama" and allow_fallback:
+    if not selected_credential and selected_provider not in NO_KEY_PROVIDERS and allow_fallback:
         fallback = normalize_provider(fallback_provider)
         if fallback != selected_provider:
             fallback_credential = provider_credential(config, fallback)
@@ -134,7 +140,7 @@ def provider_candidates(
         )
         if selected_provider in seen:
             return
-        if selected_provider != "ollama" and not str(selected_credential or "").strip():
+        if selected_provider not in NO_KEY_PROVIDERS and not str(selected_credential or "").strip():
             return
         seen.add(selected_provider)
         candidates.append((selected_provider, selected_model, selected_credential))
