@@ -636,17 +636,25 @@ async def stream_claude_code(
     # Environment without CLAUDECODE so the CLI doesn't block on nesting
     env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
 
-    args = ["cmd", "/c", _CLAUDE_BIN, "-p", prompt, "--output-format", "stream-json", "--verbose"]
+    # Pass prompt via stdin to avoid Windows 8191-char command-line limit.
+    # `-p` with no inline argument reads from stdin.
+    args = ["cmd", "/c", _CLAUDE_BIN, "-p", "--output-format", "stream-json", "--verbose"]
     if model and "claude" in model.lower():
         args += ["--model", model]
 
     try:
         proc = await asyncio.create_subprocess_exec(
             *args,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
+
+        # Write prompt to stdin and close so the CLI sees EOF
+        if proc.stdin:
+            proc.stdin.write(prompt.encode("utf-8"))
+            proc.stdin.close()
 
         yielded_any = False
         async for raw_line in proc.stdout:
