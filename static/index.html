@@ -2010,7 +2010,7 @@ select.form-inp option{background:#0d1628}
 
       <div class="settings-card" id="obs-settings-card">
         <h3>Observability Access</h3>
-        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Store the default Grafana and Zabbix web credentials here. The backend uses them for smarter dashboard checks and autonomous patrol workflows.</p>
+        <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Store the default Grafana, Zabbix, and Kuma access here. Kuma is split into public status, app access, and optional sync adapter settings so Monitoring Home uses the right source.</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="ef">
             <label>Grafana URL</label>
@@ -2025,6 +2025,10 @@ select.form-inp option{background:#0d1628}
             <input type="password" id="obs-cfg-grafana-pass" placeholder="Stored only when you change it" autocomplete="new-password" />
           </div>
           <div class="ef">
+            <label>Grafana Payment Dashboard</label>
+            <input type="url" id="obs-cfg-grafana-payment-url" placeholder="https://grafana.tabadul.iq/d/adr9fbg/cards-api-data-analysis-dashboard" />
+          </div>
+          <div class="ef">
             <label>Zabbix Web URL</label>
             <input type="url" id="obs-cfg-zabbix-url" placeholder="https://zabbix.tabadul.iq/zabbix.php?action=dashboard.view" />
           </div>
@@ -2037,8 +2041,24 @@ select.form-inp option{background:#0d1628}
             <input type="password" id="obs-cfg-zabbix-pass" placeholder="Stored only when you change it" autocomplete="new-password" />
           </div>
           <div class="ef">
-            <label>Kuma URL</label>
-            <input type="url" id="obs-cfg-kuma-url" placeholder="http://127.0.0.1:3000" />
+            <label>Kuma Public Status URL</label>
+            <input type="url" id="obs-cfg-kuma-public-url" placeholder="http://100.66.0.82:3001/status/tabadul" />
+          </div>
+          <div class="ef">
+            <label>Kuma App URL</label>
+            <input type="url" id="obs-cfg-kuma-app-url" placeholder="http://100.66.0.82:3001" />
+          </div>
+          <div class="ef">
+            <label>Kuma Sync Adapter URL</label>
+            <input type="url" id="obs-cfg-kuma-sync-url" placeholder="http://100.66.0.82:3000/api/sentinel/override" />
+          </div>
+          <div class="ef">
+            <label>Kuma Username</label>
+            <input type="text" id="obs-cfg-kuma-user" placeholder="kuma" />
+          </div>
+          <div class="ef">
+            <label>Kuma Password</label>
+            <input type="password" id="obs-cfg-kuma-pass" placeholder="Stored only when you change it" autocomplete="new-password" />
           </div>
           <div class="ef">
             <label>AI Patrol Interval (minutes)</label>
@@ -2062,6 +2082,17 @@ select.form-inp option{background:#0d1628}
       <!-- AI Providers -->
       <div class="settings-card">
         <h3><i data-lucide="bot" style="width:14px;height:14px;color:var(--cyan)"></i> AI Providers</h3>
+        <!-- Recommended banner -->
+        <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
+          <span style="font-size:20px;flex-shrink:0">💡</span>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#00d4ff;margin-bottom:4px">Recommended: Use Your Existing Subscription</div>
+            <div style="font-size:11px;color:#a8d4f5;line-height:1.7">
+              If you have a <strong style="color:#fff">Claude Pro</strong> or <strong style="color:#fff">ChatGPT Plus</strong> subscription, connect it below using the bookmarklet — <strong style="color:#4ade80">no API billing</strong>.<br>
+              Scroll down to <em>Claude Web</em> or <em>ChatGPT Web</em>, drag the bookmark button to your browser bar, then visit that site and click it.
+            </div>
+          </div>
+        </div>
         <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Configure API keys for AI Employees. Each employee can also have their own AI engine — set it in the AI Employees page.</p>
         <div class="ai-provider-grid">
           <!-- Claude -->
@@ -2221,9 +2252,12 @@ select.form-inp option{background:#0d1628}
               <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Or paste session token manually:</div>
               <input type="password" class="aip-input" id="aip-claude-web-session" placeholder="sk-ant-sid... or eyJ... (Clerk JWT)" autocomplete="off">
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:6px">
               <span class="aip-hint">Uses your Claude Pro subscription — no API charges</span>
-              <a class="aip-link" href="https://claude.ai" target="_blank" rel="noopener">claude.ai ↗</a>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button class="tb-btn" onclick="quickSetDefaultProvider('claude_web')" style="font-size:9px;padding:3px 8px;margin-left:0">⭐ Set as Default</button>
+                <a class="aip-link" href="https://claude.ai" target="_blank" rel="noopener">claude.ai ↗</a>
+              </div>
             </div>
           </div>
           <!-- ChatGPT Web (subscription) -->
@@ -2253,9 +2287,12 @@ select.form-inp option{background:#0d1628}
               <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Or paste access token manually:</div>
               <input type="password" class="aip-input" id="aip-chatgpt-web-token" placeholder="Bearer token..." autocomplete="off">
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:6px">
               <span class="aip-hint">Uses your ChatGPT Plus subscription — no API charges</span>
-              <a class="aip-link" href="https://chatgpt.com" target="_blank" rel="noopener">chatgpt.com ↗</a>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button class="tb-btn" onclick="quickSetDefaultProvider('chatgpt_web')" style="font-size:9px;padding:3px 8px;margin-left:0">⭐ Set as Default</button>
+                <a class="aip-link" href="https://chatgpt.com" target="_blank" rel="noopener">chatgpt.com ↗</a>
+              </div>
             </div>
           </div>
         </div>
@@ -5587,16 +5624,22 @@ async function loadObservabilityConfig(){
   document.getElementById('obs-cfg-grafana-url').value = cfg.grafana?.url || '';
   document.getElementById('obs-cfg-grafana-user').value = cfg.grafana?.username || '';
   document.getElementById('obs-cfg-grafana-pass').value = '';
+  document.getElementById('obs-cfg-grafana-payment-url').value = cfg.grafana?.payment_dashboard_url || '';
   document.getElementById('obs-cfg-zabbix-url').value = cfg.zabbix?.url || '';
   document.getElementById('obs-cfg-zabbix-user').value = cfg.zabbix?.username || '';
   document.getElementById('obs-cfg-zabbix-pass').value = '';
-  document.getElementById('obs-cfg-kuma-url').value = cfg.kuma?.url || '';
+  document.getElementById('obs-cfg-kuma-public-url').value = cfg.kuma?.public_url || cfg.kuma?.url || '';
+  document.getElementById('obs-cfg-kuma-app-url').value = cfg.kuma?.app_url || '';
+  document.getElementById('obs-cfg-kuma-sync-url').value = cfg.kuma?.sync_url || '';
+  document.getElementById('obs-cfg-kuma-user').value = cfg.kuma?.username || '';
+  document.getElementById('obs-cfg-kuma-pass').value = '';
   document.getElementById('obs-cfg-auto-monitor').checked = !!cfg.auto_monitor_enabled;
   document.getElementById('obs-cfg-monitor-mins').value = cfg.monitor_interval_minutes || 5;
   const status = document.getElementById('obs-cfg-result');
   if(status){
     const g = cfg.grafana?.has_password ? 'Grafana password saved' : 'Grafana password not set';
     const z = cfg.zabbix?.has_password ? 'Zabbix password saved' : 'Zabbix password not set';
+    const k = cfg.kuma?.has_password ? 'Kuma password saved' : 'Kuma password not set';
     status.innerHTML = `<span style="color:var(--muted)">${g} · ${z}</span>`;
   }
 }
@@ -5605,16 +5648,22 @@ async function saveObservabilityConfig(){
   const body = {
     grafana_url: document.getElementById('obs-cfg-grafana-url').value.trim(),
     grafana_username: document.getElementById('obs-cfg-grafana-user').value.trim(),
+    grafana_payment_dashboard_url: document.getElementById('obs-cfg-grafana-payment-url').value.trim(),
     zabbix_web_url: document.getElementById('obs-cfg-zabbix-url').value.trim(),
     zabbix_web_username: document.getElementById('obs-cfg-zabbix-user').value.trim(),
-    kuma_url: document.getElementById('obs-cfg-kuma-url').value.trim(),
+    kuma_public_url: document.getElementById('obs-cfg-kuma-public-url').value.trim(),
+    kuma_app_url: document.getElementById('obs-cfg-kuma-app-url').value.trim(),
+    kuma_sync_url: document.getElementById('obs-cfg-kuma-sync-url').value.trim(),
+    kuma_username: document.getElementById('obs-cfg-kuma-user').value.trim(),
     auto_monitor_enabled: document.getElementById('obs-cfg-auto-monitor').checked,
     monitor_interval_minutes: parseInt(document.getElementById('obs-cfg-monitor-mins').value, 10) || 5,
   };
   const grafanaPass = document.getElementById('obs-cfg-grafana-pass').value;
   const zabbixPass = document.getElementById('obs-cfg-zabbix-pass').value;
+  const kumaPass = document.getElementById('obs-cfg-kuma-pass').value;
   if(grafanaPass) body.grafana_password = grafanaPass;
   if(zabbixPass) body.zabbix_web_password = zabbixPass;
+  if(kumaPass) body.kuma_password = kumaPass;
   const status = document.getElementById('obs-cfg-result');
   if(status) status.innerHTML = '<span style="color:var(--muted)">Saving observability access...</span>';
   const r = await api('/api/observability/config', {method:'PUT', body:JSON.stringify(body)});
@@ -5624,6 +5673,7 @@ async function saveObservabilityConfig(){
   }
   document.getElementById('obs-cfg-grafana-pass').value = '';
   document.getElementById('obs-cfg-zabbix-pass').value = '';
+  document.getElementById('obs-cfg-kuma-pass').value = '';
   await loadObservabilityConfig();
   if(status){
     const patrolMsg = r?.started_workflows?.length
@@ -6176,6 +6226,146 @@ function showToast(message, tone = 'info') {
 
 let _obsCurrentTarget = 'summary';
 let _obsRefreshTimer = null;
+
+// ═══════════════════════════════════════════════════════════
+//  MONITORING HOME BOARD  (centralized Zabbix + Grafana + Kuma)
+// ═══════════════════════════════════════════════════════════
+window.renderObservabilityHomeBoard = async function() {
+  const frame   = document.getElementById('obs-frame');
+  const overlay = document.getElementById('obs-frame-overlay');
+  if (!frame || !overlay) return false;
+
+  frame.style.display = 'none';
+  overlay.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;position:absolute;inset:0;background:#06090f;padding:16px;gap:12px;align-items:stretch;justify-content:flex-start;';
+  overlay.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:40px">Loading monitoring data…</div>';
+
+  try {
+    const [health, nocData] = await Promise.all([
+      api('/api/health'),
+      api('/api/observability/overview').catch(() => null),
+    ]);
+
+    const zabbix   = nocData?.sources?.zabbix   || {};
+    const grafana  = nocData?.sources?.grafana  || {};
+    const kuma     = nocData?.sources?.kuma     || {};
+    const summary  = nocData?.summary           || {};
+    const episodes = (nocData?.episodes || []).slice(0, 8);
+
+    const zProblems  = parseInt(zabbix.problem_count  ?? summary.total_problems  ?? 0);
+    const zCritical  = parseInt(zabbix.critical_count ?? summary.critical_count  ?? 0);
+    const zHosts     = zabbix.host_count    ?? '—';
+    const gDashes    = grafana.dashboard_count ?? '—';
+    const gVersion   = grafana.version         ?? '—';
+    const kState     = kuma.page_state || kuma.status || 'unknown';
+    const kText      = kuma.status_text || kState;
+    const kGroups    = (kuma.groups || []).length;
+    const kRec       = kuma.recommended_state || summary.recommended_kuma_state || '';
+    const headline   = summary.recommended_kuma_note || summary.ai_headline || '';
+    const worker     = health?.workflow_engine?.status || 'unknown';
+
+    const zStatus = zabbix.status || (zCritical > 0 ? 'critical' : zProblems > 0 ? 'degraded' : 'ok');
+    const gStatus = grafana.status || 'unknown';
+
+    const stColor = s => {
+      if (!s || s === 'unknown' || s === '—') return '#94a3b8';
+      if (s === 'ok' || s === 'operational' || s === 'up' || s === 'healthy') return '#4ade80';
+      if (s === 'critical' || s === 'outage' || s === 'down' || s === 'error') return '#f87171';
+      return '#fbbf24';
+    };
+
+    const srcCard = (icon, label, status, rows) => {
+      const c = stColor(status);
+      return `<div style="flex:1;min-width:190px;border:1px solid ${c}30;border-radius:12px;padding:14px 16px;background:rgba(11,17,34,0.85)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:20px">${icon}</span>
+          <div style="min-width:0">
+            <div style="font-size:12px;font-weight:700;color:#fff">${label}</div>
+            <div style="font-size:10px;color:${c};font-weight:600;text-transform:uppercase;letter-spacing:.5px">${esc(status||'unknown')}</div>
+          </div>
+          <div style="margin-left:auto;width:9px;height:9px;border-radius:50%;background:${c};box-shadow:0 0 8px ${c};flex-shrink:0"></div>
+        </div>
+        ${rows.map(([k,v,vc]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <span style="font-size:10px;color:var(--muted)">${esc(k)}</span>
+          <span style="font-size:11px;font-weight:600;color:${vc||'#dbe8fb'}">${esc(String(v??'—'))}</span>
+        </div>`).join('')}
+      </div>`;
+    };
+
+    const kpiCard = (val, label, color) =>
+      `<div style="border:1px solid ${color}30;border-radius:10px;padding:14px 10px;background:rgba(11,17,34,0.85);text-align:center;min-width:0">
+        <div style="font-size:22px;font-weight:700;color:${color};line-height:1">${esc(String(val))}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">${esc(label)}</div>
+      </div>`;
+
+    const workerColor = (worker === 'ok' || worker === 'running') ? '#4ade80' : '#f97316';
+    const recColor    = stColor(kRec || kState);
+
+    const episodeRows = episodes.length ? `
+      <div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;background:rgba(11,17,34,0.85)">
+        <div style="font-size:11px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          ⚡ Active Issues <span style="font-size:10px;font-weight:400;color:var(--muted)">(${episodes.length})</span>
+        </div>
+        ${episodes.map(ep => {
+          const sc = stColor(ep.status);
+          return `<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+            <span style="width:7px;height:7px;border-radius:50%;background:${sc};margin-top:4px;flex-shrink:0"></span>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:11px;color:#e0eaff;font-weight:600">${esc(ep.label||ep.service_id||'Unknown')}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px;line-clamp:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ep.summary||ep.next_action||'')}</div>
+            </div>
+            <span style="font-size:9px;color:${sc};font-weight:700;white-space:nowrap;flex-shrink:0;text-transform:uppercase">${esc(ep.status||'')}</span>
+          </div>`;
+        }).join('')}
+      </div>` : `<div style="border:1px solid rgba(74,222,128,0.2);border-radius:12px;padding:14px 16px;background:rgba(11,17,34,0.85);display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">✅</span>
+        <div>
+          <div style="font-size:11px;color:#4ade80;font-weight:700">All Services Healthy</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">No active issues detected across monitored services.</div>
+        </div>
+      </div>`;
+
+    overlay.innerHTML = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${srcCard('🔵', 'Zabbix', zStatus, [
+          ['Problems', zProblems, zProblems > 0 ? '#f87171' : '#4ade80'],
+          ['Critical',  zCritical, zCritical > 0 ? '#f87171' : '#4ade80'],
+          ['Total Hosts', zHosts, '#dbe8fb'],
+        ])}
+        ${srcCard('📊', 'Grafana', gStatus, [
+          ['Dashboards', gDashes, '#dbe8fb'],
+          ['Version', gVersion, '#94a3b8'],
+          ['Auth', grafana.auth_ok != null ? (grafana.auth_ok ? 'OK' : 'Failed') : (gStatus==='ok'?'OK':'—'), grafana.auth_ok ? '#4ade80' : '#f87171'],
+        ])}
+        ${srcCard('🟢', 'Kuma', kState, [
+          ['Page Status', kText, stColor(kState)],
+          ['Recommended', kRec || '—', recColor],
+          ['Groups', kGroups, '#dbe8fb'],
+        ])}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        ${kpiCard(zProblems, 'Active Problems', zProblems > 0 ? '#f87171' : '#4ade80')}
+        ${kpiCard(zCritical, 'Critical', zCritical > 0 ? '#f87171' : '#4ade80')}
+        ${kpiCard(worker.toUpperCase(), 'Workflow Worker', workerColor)}
+        ${kpiCard(kRec || kState || '—', 'Kuma Rec.', recColor)}
+      </div>
+      ${headline ? `<div style="border:1px solid rgba(0,212,255,0.18);border-radius:10px;padding:12px 16px;background:rgba(0,212,255,0.04);font-size:11px;color:#a8d4f5;line-height:1.75">
+        <span style="color:var(--cyan);font-weight:700;margin-right:8px">NOC AI</span>${esc(headline)}
+      </div>` : ''}
+      ${episodeRows}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="tb-btn" onclick="obsSelectTarget('grafana')" style="margin-left:0;font-size:10px">📊 Open Grafana</button>
+        <button class="tb-btn" onclick="obsSelectTarget('zabbix')"  style="margin-left:0;font-size:10px">🔵 Open Zabbix</button>
+        <button class="tb-btn" onclick="obsSelectTarget('kuma')"    style="margin-left:0;font-size:10px">🟢 Open Kuma</button>
+        <button class="tb-btn" onclick="renderObservabilityHomeBoard()" style="margin-left:auto;font-size:10px">↺ Refresh</button>
+      </div>
+      <div style="font-size:9px;color:rgba(90,122,154,0.6);text-align:right">Updated ${new Date().toLocaleTimeString()}</div>
+    `;
+    return true;
+  } catch(e) {
+    console.error('renderObservabilityHomeBoard error:', e);
+    return false;
+  }
+};
 
 function obsDefaults(){
   return obsConfiguredDefaults();
@@ -8704,17 +8894,40 @@ async function saveWorkflow() {
 
 async function triggerWorkflow(id, name) {
   if (!confirm(`Run "${name}" now?`)) return;
+  const trigBtn = document.querySelector(`button.wf-btn.run[onclick*="triggerWorkflow(${id},"]`);
+  if (trigBtn) { trigBtn.disabled = true; trigBtn.textContent = '⏳ Running…'; }
   const r = await api(`/api/workflows/${id}/trigger`, { method: 'POST', body: '{}' });
+  if (trigBtn) { trigBtn.disabled = false; trigBtn.textContent = '▶ Run Now'; }
   if (isApiError(r) || r?.ok === false) {
-    alert(apiMessage(r, 'Workflow trigger failed.'));
+    showToast(apiMessage(r, 'Workflow trigger failed.'), 'error');
     return;
   }
   if (r?.status === 'awaiting_approval') {
-    alert('Workflow queued for approval. A different operator must approve it before it can execute.');
+    showToast('Workflow queued for approval — a different operator must approve it.', 'warn');
     await loadWorkflowApprovals();
     return;
   }
-  if (r?.ok) { alert('Workflow triggered! Check History to see the result.'); }
+  // Show result inline in the runs modal
+  const modal = document.getElementById('wf-runs-modal');
+  document.getElementById('wf-runs-title').textContent = `Run Result — ${name}`;
+  const status = r?.status || (r?.ok ? 'success' : 'error');
+  const sc = {success:'#4ade80', error:'#ef4444', running:'#fbbf24', blocked:'#94a3b8'}[status] || '#fbbf24';
+  const aiHtml = r?.ai_response
+    ? `<div style="font-size:11px;color:var(--text);line-height:1.7;white-space:pre-wrap;max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:rgba(0,0,0,0.3)">${esc(r.ai_response.substring(0,1500))}${r.ai_response.length>1500?'\n…(truncated)':''}</div>`
+    : `<div style="font-size:11px;color:var(--muted);font-style:italic;margin-bottom:8px">No AI response — check that an AI provider is configured in Settings → AI Keys.</div>`;
+  const actHtml = r?.action_result
+    ? `<div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;padding:6px 10px;border-radius:6px;background:rgba(0,0,0,0.3)">Action: ${esc(r.action_result)}</div>`
+    : '';
+  document.getElementById('wf-runs-list').innerHTML = `
+    <div style="border:1px solid ${sc}33;border-radius:8px;padding:14px;background:rgba(11,17,34,0.9)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:11px;color:${sc};font-weight:700">● ${status.toUpperCase()}</span>
+        ${r?.effective_risk_tier ? `<span style="font-size:9px;color:var(--muted);background:rgba(255,255,255,0.05);padding:2px 7px;border-radius:4px">${esc(r.effective_risk_tier)}</span>` : ''}
+        <span style="font-size:9px;color:var(--muted);margin-left:auto;font-family:'JetBrains Mono',monospace">${new Date().toLocaleString()}</span>
+      </div>
+      ${aiHtml}${actHtml}
+    </div>`;
+  modal.style.display = 'flex';
 }
 
 async function viewWfRuns(id, name) {
@@ -10514,6 +10727,24 @@ async function loadAiKeys() {
   if (r.default_model) {
     const dm = document.getElementById('aip-default-model');
     if (dm) dm.value = r.default_model;
+  }
+}
+
+async function quickSetDefaultProvider(provider) {
+  const providerSel = document.getElementById('aip-default-provider');
+  if (providerSel) {
+    providerSel.value = provider;
+    if (typeof updateAipModelOptions === 'function') updateAipModelOptions();
+  }
+  const r = await api('/api/import/aikeys', {
+    method: 'POST',
+    body: JSON.stringify({ default_ai_provider: provider }),
+  });
+  if (r?.ok) {
+    showToast(`Default provider set to ${provider === 'claude_web' ? 'Claude Web' : 'ChatGPT Web'}`, 'success');
+    loadAiKeys();
+  } else {
+    showToast(apiMessage(r, 'Could not update default provider'), 'error');
   }
 }
 
