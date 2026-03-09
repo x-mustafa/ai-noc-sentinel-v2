@@ -369,3 +369,19 @@ async def frame_proxy(
             )
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Proxy error: {exc}")
+
+
+@router.get("/kuma/live")
+async def kuma_live_status(session: dict = Depends(get_session)):
+    """Proxy the Tabadul Kuma status page API — returns live service group health."""
+    cfg = await _load_cfg()
+    from urllib.parse import urlparse as _up
+    kuma_base = str(cfg.get("kuma_public_url") or "http://100.66.0.82:3000").strip().rstrip("/")
+    parsed = _up(kuma_base)
+    api_url = f"{parsed.scheme}://{parsed.netloc}/api/status"
+    try:
+        async with httpx.AsyncClient(timeout=8.0, verify=False) as client:
+            resp = await client.get(api_url)
+            return resp.json()
+    except Exception as exc:
+        return {"overall": "unknown", "groups": [], "error": str(exc), "stale": True}

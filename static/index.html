@@ -1690,6 +1690,12 @@ select.form-inp option{background:#0d1628}
     </div>
   </div>
   <nav>
+    <!-- COMMAND CENTER -->
+    <div class="ext-section-hdr">Command</div>
+    <a class="nav-item" href="/monitoring" style="text-decoration:none">
+      <span class="nav-icon"><i data-lucide="layout-dashboard" style="width:16px;height:16px"></i></span>
+      <span class="nav-label">Command Center</span>
+    </a>
     <div class="nav-item" data-page="map" onclick="navigate('map')">
       <span class="nav-icon"><i data-lucide="network" style="width:16px;height:16px"></i></span>
       <span class="nav-label">Network Map</span>
@@ -7696,6 +7702,18 @@ async function hrSaveRow(i, nodeId){
 // ═══════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════
+// Handle ?page=xxx URL parameter (from monitoring.html links)
+(function handlePageParam(){
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get('page');
+  if(page) {
+    // Remove ?page from URL without reload
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    // Schedule page show after init
+    window._startPage = page;
+  }
+})();
+
 async function init(){
   lucide.createIcons();
   ensureMapSectionPlacement();
@@ -7722,7 +7740,13 @@ async function init(){
   initTrafficCanvas();
   visNetwork.once('stabilized',()=>visNetwork.fit({animation:{duration:700}}));
   window.addEventListener('resize',()=>{ visNetwork.fit(); resizeTrafficCanvas(); });
-  navigate('observability-summary');
+  // Handle ?page=xxx URL parameter (from monitoring.html links)
+  const _startPage = window._startPage || null;
+  if(_startPage){
+    navigate(_startPage);
+  } else {
+    navigate('observability-summary');
+  }
   dismissSplash('SYSTEM READY');
 }
 

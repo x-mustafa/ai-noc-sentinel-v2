@@ -403,3 +403,32 @@ async def test_site(site_id: int, session: dict = Depends(get_session)):
     if result is None or (isinstance(result, dict) and "_zabbix_error" in result):
         return {"ok": False, "error": str(result)}
     return {"ok": True, "version": result, "site": row["name"]}
+
+
+@router.get("/summary")
+async def zabbix_summary(session: dict = Depends(get_session)):
+    """Compact summary for the monitoring dashboard."""
+    problems_raw = await call_zabbix("problem.get", {
+        "output": ["eventid", "name", "severity", "clock", "objectid"],
+        "recent": True, "sortfield": "eventid", "sortorder": "DESC", "limit": 200,
+    })
+    problems = problems_raw if isinstance(problems_raw, list) else []
+    hosts_raw = await call_zabbix("host.get", {
+        "output": ["hostid", "available"],
+        "monitored_hosts": 1, "filter": {"status": 0},
+    })
+    hosts = hosts_raw if isinstance(hosts_raw, list) else []
+    sev = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0}
+    for p in problems:
+        s = int(p.get("severity", 0))
+        sev[s] = sev.get(s, 0) + 1
+    return {
+        "total_hosts": len(hosts),
+        "total_problems": len(problems),
+        "severity_counts": sev,
+        "top_problems": [
+            {"name": p.get("name",""), "severity": int(p.get("severity",0)), "clock": int(p.get("clock",0))}
+            for p in problems[:10]
+        ],
+        "ok": not (isinstance(problems_raw, dict) and "_zabbix_error" in problems_raw),
+    }

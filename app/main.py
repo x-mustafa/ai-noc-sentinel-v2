@@ -180,6 +180,15 @@ if os.path.isdir(static_dir):
 _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
 
 
+@app.get("/monitoring")
+async def monitoring_page():
+    html_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "static", "pages", "monitoring.html"))
+    if os.path.isfile(html_path):
+        return FileResponse(html_path)
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/")
+
+
 @app.get("/")
 async def index():
     html_path = os.path.join(static_dir, "index.html")

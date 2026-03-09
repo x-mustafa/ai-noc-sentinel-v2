@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOC Command Center</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* === BASE === */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06090f;--surface:#0b1120;--surface2:#0f1929;--surface3:#131f36;
+  --border:#1a2b44;--border2:#223558;--text:#c2d4eb;--muted:#5a7a9a;--bright:#fff;
+  --cyan:#00d4ff;--green:#00e676;--yellow:#ffb300;--orange:#ff6d00;--red:#ff1744;--purple:#bb86fc;
+  --sev5:#ff1744;--sev4:#ff6d00;--sev3:#ffb300;--sev2:#78909c;--sev1:#00b0ff;
+  --radius:10px;--sidebar:220px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:13px;overflow:hidden}
+
+/* === TOPBAR === */
+#topbar{
+  position:fixed;top:0;left:0;right:0;height:52px;
+  background:rgba(11,17,32,0.95);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:16px;padding:0 20px;z-index:100;
+}
+.tb-logo{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--bright);text-decoration:none}
+.tb-logo img{width:28px;height:28px;object-fit:contain}
+.tb-title{color:var(--cyan);font-size:12px;font-weight:500;margin-left:4px;letter-spacing:.5px}
+.tb-nav{display:flex;gap:4px;margin-left:auto}
+.tb-nav a{color:var(--muted);text-decoration:none;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;transition:all .2s}
+.tb-nav a:hover{color:var(--text);background:var(--surface2)}
+.tb-nav a.active{color:var(--cyan);background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2)}
+.tb-user{color:var(--muted);font-size:11px;display:flex;align-items:center;gap:8px;margin-left:12px}
+.tb-user span{background:var(--surface2);padding:4px 10px;border-radius:20px;border:1px solid var(--border)}
+#refresh-indicator{width:8px;height:8px;border-radius:50%;background:var(--green);margin-left:8px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* === LAYOUT === */
+#layout{display:flex;height:100%;padding-top:52px}
+
+/* === SIDEBAR === */
+#sidebar{
+  width:var(--sidebar);flex-shrink:0;
+  background:linear-gradient(180deg,#080d1a 0%,#060a14 100%);
+  border-right:1px solid var(--border);
+  overflow-y:auto;padding:12px 0;
+}
+.nav-section{padding:8px 14px 4px;font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:8px 16px;
+  color:var(--muted);text-decoration:none;font-size:12px;font-weight:500;
+  cursor:pointer;border-left:2px solid transparent;transition:all .15s;
+}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,0.04);border-left-color:var(--border2)}
+.nav-item.active{color:var(--cyan);background:rgba(0,212,255,0.06);border-left-color:var(--cyan)}
+.nav-icon{font-size:14px;width:18px;text-align:center}
+
+/* === MAIN === */
+#main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+
+/* === STATUS BAR === */
+#status-bar{
+  display:flex;gap:8px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px 16px;
+}
+.src-pill{
+  display:flex;align-items:center;gap:6px;padding:4px 12px;
+  border-radius:20px;border:1px solid;font-size:11px;font-weight:600;
+  background:rgba(0,0,0,0.3);
+}
+.src-pill.ok{color:var(--green);border-color:rgba(0,230,118,0.3);background:rgba(0,230,118,0.07)}
+.src-pill.warn{color:var(--yellow);border-color:rgba(255,179,0,0.3);background:rgba(255,179,0,0.07)}
+.src-pill.err{color:var(--red);border-color:rgba(255,23,68,0.3);background:rgba(255,23,68,0.07)}
+.src-pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.last-refresh{margin-left:auto;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:6px}
+
+/* === GRID === */
+#content-grid{display:grid;grid-template-columns:38% 1fr;gap:12px;flex:1;min-height:0}
+
+/* === CARDS === */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.card-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--bright);letter-spacing:.3px}
+.card-header .badge{margin-left:auto;font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(0,212,255,0.12);color:var(--cyan);border:1px solid rgba(0,212,255,0.2)}
+.card-body{padding:12px 14px}
+
+/* === AI CREW === */
+#crew-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.emp-card{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:10px;cursor:pointer;transition:all .2s;text-decoration:none;display:block;
+}
+.emp-card:hover{border-color:var(--cyan);background:rgba(0,212,255,0.04)}
+.emp-avatar{font-size:22px;line-height:1;margin-bottom:4px}
+.emp-name{font-size:11px;font-weight:700;color:var(--bright);margin-bottom:2px}
+.emp-role{font-size:9px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.emp-status{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:600;border:1px solid}
+.emp-status.busy{color:var(--yellow);border-color:rgba(255,179,0,.3);background:rgba(255,179,0,.08)}
+.emp-status.available{color:var(--green);border-color:rgba(0,230,118,.3);background:rgba(0,230,118,.08)}
+.emp-status.investigating{color:var(--cyan);border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.08)}
+.emp-status.idle,.emp-status.on_call{color:var(--muted);border-color:var(--border);background:var(--surface)}
+.emp-task{font-size:9px;color:var(--muted);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* === SERVICE STATUS (KUMA) === */
+.svc-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+.svc-row:last-child{border-bottom:none}
+.svc-name{flex:1;font-size:12px;font-weight:500;color:var(--text)}
+.svc-count{font-size:10px;color:var(--muted);margin-right:4px}
+.svc-badge{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;border:1px solid}
+.svc-badge.operational{color:var(--green);border-color:rgba(0,230,118,.3);background:rgba(0,230,118,.08)}
+.svc-badge.degraded{color:var(--yellow);border-color:rgba(255,179,0,.3);background:rgba(255,179,0,.08)}
+.svc-badge.outage{color:var(--red);border-color:rgba(255,23,68,.3);background:rgba(255,23,68,.08)}
+.svc-badge.unknown{color:var(--muted);border-color:var(--border);background:var(--surface2)}
+.svc-problem{padding:5px 10px;margin:4px 0;background:rgba(255,179,0,0.07);border:1px solid rgba(255,179,0,0.2);border-radius:6px;font-size:10px;color:var(--yellow)}
+
+/* === INCIDENTS === */
+.inc-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px}
+.inc-row:last-child{border-bottom:none}
+.inc-sev{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.inc-title{flex:1;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inc-owner{font-size:9px;color:var(--muted);flex-shrink:0}
+
+/* === ZABBIX PROBLEMS === */
+.sev-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:12px;background:var(--surface2)}
+.sev-segment{height:100%;transition:width .5s}
+.sev-legend{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.sev-leg-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
+.sev-leg-dot{width:8px;height:8px;border-radius:50%}
+
+.prob-list{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto}
+.prob-row{
+  display:flex;align-items:center;gap:8px;padding:6px 10px;
+  background:var(--surface2);border-radius:6px;border:1px solid var(--border);font-size:11px;
+}
+.prob-sev{padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;border:1px solid;flex-shrink:0}
+.prob-sev.s5{color:var(--sev5);border-color:rgba(255,23,68,.3);background:rgba(255,23,68,.08)}
+.prob-sev.s4{color:var(--sev4);border-color:rgba(255,109,0,.3);background:rgba(255,109,0,.08)}
+.prob-sev.s3{color:var(--sev3);border-color:rgba(255,179,0,.3);background:rgba(255,179,0,.08)}
+.prob-sev.s2{color:var(--sev2);border-color:rgba(120,144,156,.3);background:rgba(120,144,156,.08)}
+.prob-sev.s1{color:var(--sev1);border-color:rgba(0,176,255,.3);background:rgba(0,176,255,.08)}
+.prob-name{flex:1;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prob-time{font-size:9px;color:var(--muted);flex-shrink:0}
+
+/* === GRAFANA EMBED === */
+#grafana-frame-wrap{
+  position:relative;border-radius:var(--radius);overflow:hidden;
+  background:var(--surface2);border:1px solid var(--border);
+  height:300px;margin-top:10px;
+}
+#grafana-frame{width:100%;height:100%;border:none;display:block}
+.grafana-overlay{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:var(--surface2);flex-direction:column;gap:8px;color:var(--muted);font-size:12px;
+}
+
+/* === SCROLLBARS === */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+/* === TOAST === */
+#toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;display:none;animation:slidein .2s ease}
+@keyframes slidein{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* === EMPTY STATE === */
+.empty{display:flex;align-items:center;justify-content:center;padding:20px;color:var(--muted);font-size:11px;gap:8px}
+
+/* === LEFT COLUMN === */
+#left-col{display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:calc(100vh - 52px - 60px - 24px)}
+/* === RIGHT COLUMN === */
+#right-col{display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:calc(100vh - 52px - 60px - 24px)}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <a class="tb-logo" href="/">
+    <img src="/static/logo.png" alt="NOC" onerror="this.style.display='none'">
+    Tabadul NOC
+    <span class="tb-title">COMMAND CENTER</span>
+  </a>
+  <div class="tb-nav">
+    <a href="/monitoring" class="active">Monitoring</a>
+    <a href="/?page=office">AI Office</a>
+    <a href="/?page=incidents">Incidents</a>
+    <a href="/?page=alarms">Alarms</a>
+    <a href="/?page=settings">Settings</a>
+  </div>
+  <div class="tb-user">
+    <span id="user-chip">Loading...</span>
+    <div id="refresh-indicator" title="Auto-refreshing every 30s"></div>
+  </div>
+</div>
+
+<div id="layout">
+  <!-- SIDEBAR -->
+  <nav id="sidebar">
+    <div class="nav-section">Command</div>
+    <a class="nav-item active" href="/monitoring"><span class="nav-icon">🎯</span> Command Center</a>
+    <a class="nav-item" href="/?page=office"><span class="nav-icon">🤖</span> AI Employees</a>
+
+    <div class="nav-section" style="margin-top:8px">Operations</div>
+    <a class="nav-item" href="/?page=incidents"><span class="nav-icon">🚨</span> Incidents</a>
+    <a class="nav-item" href="/?page=alarms"><span class="nav-icon">🔔</span> Alarms</a>
+    <a class="nav-item" href="/?page=hosts"><span class="nav-icon">🖥️</span> Hosts</a>
+    <a class="nav-item" href="/?page=map"><span class="nav-icon">🗺️</span> Network Map</a>
+
+    <div class="nav-section" style="margin-top:8px">Automation</div>
+    <a class="nav-item" href="/?page=workflows"><span class="nav-icon">⚡</span> Workflows</a>
+    <a class="nav-item" href="/?page=alert-rules"><span class="nav-icon">📏</span> Alert Rules</a>
+    <a class="nav-item" href="/?page=runbooks"><span class="nav-icon">📖</span> Runbooks</a>
+
+    <div class="nav-section" style="margin-top:8px">Intelligence</div>
+    <a class="nav-item" href="/?page=sla"><span class="nav-icon">📊</span> SLA</a>
+    <a class="nav-item" href="/?page=intel"><span class="nav-icon">🧠</span> Intel</a>
+    <a class="nav-item" href="/?page=watchlist"><span class="nav-icon">👁️</span> Watchlist</a>
+
+    <div class="nav-section" style="margin-top:8px">System</div>
+    <a class="nav-item" href="/?page=changes"><span class="nav-icon">📅</span> Changes</a>
+    <a class="nav-item" href="/?page=settings"><span class="nav-icon">⚙️</span> Settings</a>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div id="main">
+    <!-- STATUS BAR -->
+    <div id="status-bar">
+      <div class="src-pill" id="pill-zabbix"><div class="dot"></div> <span>Zabbix</span></div>
+      <div class="src-pill" id="pill-kuma"><div class="dot"></div> <span>Services</span></div>
+      <div class="src-pill" id="pill-grafana"><div class="dot"></div> <span>Grafana</span></div>
+      <div class="src-pill warn" id="pill-problems"><div class="dot"></div> <span id="problems-count">— problems</span></div>
+      <div class="last-refresh">
+        <span id="refresh-time">—</span>
+        <button onclick="loadAll()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:6px;cursor:pointer;font-size:10px">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div id="content-grid">
+      <!-- LEFT COLUMN -->
+      <div id="left-col">
+        <!-- AI Crew -->
+        <div class="card">
+          <div class="card-header">🤖 AI Employees <span class="badge" id="crew-badge">—</span></div>
+          <div class="card-body">
+            <div id="crew-grid">
+              <div class="empty">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Service Status (Kuma) -->
+        <div class="card">
+          <div class="card-header">🔗 Payment Services <span class="badge" id="kuma-badge">—</span></div>
+          <div class="card-body" id="kuma-body">
+            <div class="empty">Loading...</div>
+          </div>
+        </div>
+
+        <!-- Active Incidents -->
+        <div class="card">
+          <div class="card-header">🚨 Active Incidents <span class="badge" id="inc-badge">—</span></div>
+          <div class="card-body" id="incidents-body">
+            <div class="empty">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div id="right-col">
+        <!-- Zabbix Problems -->
+        <div class="card">
+          <div class="card-header">
+            📡 Zabbix — Active Problems
+            <span class="badge" id="zabbix-badge">—</span>
+          </div>
+          <div class="card-body" id="zabbix-body">
+            <div class="empty">Loading...</div>
+          </div>
+        </div>
+
+        <!-- Grafana Embed -->
+        <div class="card">
+          <div class="card-header">📈 Grafana — Live Dashboard</div>
+          <div class="card-body" style="padding:0">
+            <div id="grafana-frame-wrap">
+              <div class="grafana-overlay" id="grafana-overlay">
+                <span style="font-size:24px">📊</span>
+                <span>Loading Grafana dashboard...</span>
+              </div>
+              <iframe id="grafana-frame" src="" onload="grafanaLoaded()" onerror="grafanaFailed()"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SEV_LABELS = ['Not classified','Info','Warning','Average','High','Disaster'];
+const SEV_COLORS = ['#9e9e9e','#00b0ff','#78909c','#ffb300','#ff6d00','#ff1744'];
+const SEV_CLASS  = ['','s1','s2','s3','s4','s5'];
+
+function timeAgo(epoch){
+  if(!epoch) return '';
+  const s = Math.floor(Date.now()/1000 - epoch);
+  if(s < 60) return `${s}s ago`;
+  if(s < 3600) return `${Math.floor(s/60)}m ago`;
+  if(s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function toast(msg, type='info'){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.cssText = `display:block;background:${type==='error'?'#ff1744':type==='ok'?'#00e676':'#1a2b44'};color:#fff;`;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.style.display='none', 3000);
+}
+
+function setPill(id, ok, label){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.className = 'src-pill ' + (ok===true?'ok':ok===false?'err':'warn');
+  el.querySelector('span').textContent = label;
+}
+
+// === AUTH CHECK ===
+async function checkAuth(){
+  const r = await fetch('/api/auth/me');
+  if(r.status === 401){ window.location.href = '/'; return null; }
+  const d = await r.json();
+  document.getElementById('user-chip').textContent = d.username || 'User';
+  return d;
+}
+
+// === ZABBIX ===
+async function loadZabbix(){
+  try{
+    const r = await fetch('/api/zabbix/summary');
+    if(!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    renderZabbix(d);
+  }catch(e){
+    document.getElementById('zabbix-body').innerHTML = `<div class="empty">⚠️ Zabbix error: ${e.message}</div>`;
+    setPill('pill-zabbix', false, 'Zabbix: error');
+    document.getElementById('zabbix-badge').textContent = 'error';
+  }
+}
+
+function renderZabbix(d){
+  const total = d.total_problems || 0;
+  const sev = d.severity_counts || {};
+  const hosts = d.total_hosts || 0;
+  document.getElementById('problems-count').textContent = `${total} problems`;
+  setPill('pill-zabbix', d.ok!==false, `Zabbix: ${hosts} hosts`);
+  document.getElementById('zabbix-badge').textContent = `${total} active`;
+
+  const pill = document.getElementById('pill-problems');
+  if(total > 0){
+    const hasCrit = (sev[5]||0)+(sev[4]||0) > 0;
+    pill.className = 'src-pill ' + (hasCrit?'err':'warn');
+  } else {
+    pill.className = 'src-pill ok';
+  }
+
+  // Severity bar
+  const sevMap = [
+    {s:5,label:'Disaster',color:SEV_COLORS[5]},
+    {s:4,label:'High',color:SEV_COLORS[4]},
+    {s:3,label:'Average',color:SEV_COLORS[3]},
+    {s:2,label:'Warning',color:SEV_COLORS[2]},
+    {s:1,label:'Info',color:SEV_COLORS[1]},
+  ];
+  const nonzero = sevMap.filter(x => (sev[x.s]||0) > 0);
+  let barHtml = '', legendHtml = '';
+  if(total > 0){
+    sevMap.forEach(x => {
+      const pct = ((sev[x.s]||0)/total*100).toFixed(1);
+      if(pct > 0) barHtml += `<div class="sev-segment" style="width:${pct}%;background:${x.color}" title="${x.label}: ${sev[x.s]||0}"></div>`;
+    });
+    nonzero.forEach(x => {
+      legendHtml += `<div class="sev-leg-item"><div class="sev-leg-dot" style="background:${x.color}"></div>${x.label}: <strong style="color:#fff">${sev[x.s]||0}</strong></div>`;
+    });
+  }
+
+  // Problem list
+  const probs = d.top_problems || [];
+  let probHtml = probs.map(p => `
+    <div class="prob-row">
+      <span class="prob-sev ${SEV_CLASS[p.severity]||''}">${SEV_LABELS[p.severity]||'?'}</span>
+      <span class="prob-name" title="${p.name}">${p.name}</span>
+      <span class="prob-time">${timeAgo(p.clock)}</span>
+    </div>`).join('');
+
+  document.getElementById('zabbix-body').innerHTML = total === 0
+    ? '<div class="empty">✅ No active problems</div>'
+    : `<div class="sev-bar">${barHtml||'<div class="sev-segment" style="width:100%;background:#1a2b44"></div>'}</div>
+       <div class="sev-legend">${legendHtml}</div>
+       <div class="prob-list">${probHtml}</div>`;
+}
+
+// === KUMA ===
+async function loadKuma(){
+  try{
+    const r = await fetch('/api/observability/kuma/live');
+    if(!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    renderKuma(d);
+  }catch(e){
+    document.getElementById('kuma-body').innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
+    setPill('pill-kuma', false, 'Services: error');
+  }
+}
+
+function renderKuma(d){
+  const groups = d.groups || [];
+  const overall = d.overall || 'unknown';
+  const overallOk = overall === 'operational';
+  const overallWarn = overall === 'degraded';
+  setPill('pill-kuma', overallOk ? true : overallWarn ? null : false,
+    `Services: ${overall.charAt(0).toUpperCase()+overall.slice(1)}`);
+  document.getElementById('kuma-badge').textContent = overall;
+
+  if(!groups.length){
+    document.getElementById('kuma-body').innerHTML = '<div class="empty">No service data</div>';
+    return;
+  }
+  const html = groups.map(g => {
+    const cls = g.status === 'operational' ? 'operational' : g.status === 'degraded' ? 'degraded' : g.status === 'outage' ? 'outage' : 'unknown';
+    const problems = (g.activeProblems||[]).map(p =>
+      `<div class="svc-problem">⚠️ ${p.message}</div>`).join('');
+    return `<div>
+      <div class="svc-row">
+        <div class="svc-name">${g.name}</div>
+        <div class="svc-count">${g.affectedCount===0?g.totalCount+'/'+ g.totalCount:''}${g.affectedCount>0?`${g.totalCount-g.affectedCount}/${g.totalCount}`:''}</div>
+        <div class="svc-badge ${cls}">${cls.charAt(0).toUpperCase()+cls.slice(1)}</div>
+      </div>
+      ${problems}
+    </div>`;
+  }).join('');
+  document.getElementById('kuma-body').innerHTML = html;
+}
+
+// === AI CREW ===
+async function loadCrew(){
+  try{
+    const r = await fetch('/api/office/nocboard');
+    if(!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    renderCrew(Array.isArray(d)?d:[]);
+  }catch(e){
+    document.getElementById('crew-grid').innerHTML = `<div class="empty" style="grid-column:1/-1">⚠️ ${e.message}</div>`;
+  }
+}
+
+function renderCrew(emps){
+  const avatars = {aria:'🔍',nexus:'🧭',cipher:'🔐',vega:'📡'};
+  const active = emps.filter(e => e.status !== 'available' && e.status !== 'off_shift').length;
+  document.getElementById('crew-badge').textContent = `${active} active`;
+
+  if(!emps.length){
+    document.getElementById('crew-grid').innerHTML = '<div class="empty" style="grid-column:1/-1">No employee data</div>';
+    return;
+  }
+  document.getElementById('crew-grid').innerHTML = emps.map(e => `
+    <a class="emp-card" href="/?page=office">
+      <div class="emp-avatar">${avatars[e.id]||'🤖'}</div>
+      <div class="emp-name">${e.id.toUpperCase()}</div>
+      <div class="emp-role">${e.title||'AI Analyst'}</div>
+      <div class="emp-status ${e.status||'idle'}">${(e.status||'IDLE').toUpperCase()}</div>
+      ${e.current_task?`<div class="emp-task">${e.current_task}</div>`:''}
+    </a>`).join('');
+}
+
+// === INCIDENTS ===
+async function loadIncidents(){
+  try{
+    const r = await fetch('/api/incidents?status=open&limit=5');
+    if(!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    const incs = Array.isArray(d) ? d : (d.incidents||d.items||[]);
+    document.getElementById('inc-badge').textContent = `${incs.length} open`;
+    if(!incs.length){
+      document.getElementById('incidents-body').innerHTML = '<div class="empty">✅ No open incidents</div>';
+      return;
+    }
+    document.getElementById('incidents-body').innerHTML = incs.map(inc => `
+      <div class="inc-row">
+        <div class="inc-sev" style="background:${['#9e9e9e','#00b0ff','#ffb300','#ff6d00','#ff1744'][Math.min(inc.severity||0,4)]}"></div>
+        <div class="inc-title">${inc.title||inc.name||'Incident'}</div>
+        <div class="inc-owner">${inc.owner_id||''}</div>
+      </div>`).join('');
+  }catch(e){
+    document.getElementById('incidents-body').innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
+  }
+}
+
+// === GRAFANA ===
+function loadGrafana(){
+  const grafanaUrl = 'https://grafana.tabadul.iq';
+  const proxyUrl = `/api/observability/frame-proxy?url=${encodeURIComponent(grafanaUrl)}`;
+  const frame = document.getElementById('grafana-frame');
+  setPill('pill-grafana', null, 'Grafana: loading');
+  frame.src = proxyUrl;
+}
+function grafanaLoaded(){
+  document.getElementById('grafana-overlay').style.display = 'none';
+  document.getElementById('grafana-frame').style.display = 'block';
+  setPill('pill-grafana', true, 'Grafana: live');
+}
+function grafanaFailed(){
+  document.getElementById('grafana-overlay').innerHTML = '<span style="font-size:20px">📊</span><span>Grafana not reachable</span>';
+  setPill('pill-grafana', false, 'Grafana: error');
+}
+
+// === LOAD ALL ===
+async function loadAll(){
+  document.getElementById('refresh-time').textContent = 'Refreshing...';
+  await Promise.all([loadZabbix(), loadKuma(), loadCrew(), loadIncidents()]);
+  loadGrafana();
+  const now = new Date();
+  document.getElementById('refresh-time').textContent = `Updated ${now.toLocaleTimeString()}`;
+}
+
+// === INIT ===
+(async () => {
+  const user = await checkAuth();
+  if(!user) return;
+  await loadAll();
+  // Auto-refresh every 30s
+  setInterval(loadAll, 30000);
+})();
+</script>
+</body>
+</html>
