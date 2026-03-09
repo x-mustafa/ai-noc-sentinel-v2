@@ -1,7 +1,8 @@
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.database import execute, fetch_one
@@ -39,10 +40,16 @@ class ObservabilityConfigBody(BaseModel):
     grafana_url: str | None = Field(None, max_length=2000)
     grafana_username: str | None = Field(None, max_length=200)
     grafana_password: str | None = Field(None, max_length=500)
+    grafana_payment_dashboard_url: str | None = Field(None, max_length=2000)
     zabbix_web_url: str | None = Field(None, max_length=2000)
     zabbix_web_username: str | None = Field(None, max_length=200)
     zabbix_web_password: str | None = Field(None, max_length=500)
     kuma_url: str | None = Field(None, max_length=2000)
+    kuma_public_url: str | None = Field(None, max_length=2000)
+    kuma_app_url: str | None = Field(None, max_length=2000)
+    kuma_sync_url: str | None = Field(None, max_length=2000)
+    kuma_username: str | None = Field(None, max_length=200)
+    kuma_password: str | None = Field(None, max_length=500)
     auto_monitor_enabled: bool | None = None
     monitor_interval_minutes: int | None = Field(None, ge=1, le=60)
 
@@ -176,8 +183,10 @@ async def _upsert_autonomous_patrols(cfg: dict, requested_by: str) -> list[dict]
 @router.get("/config")
 async def get_observability_config(session: dict = Depends(get_session)):
     cfg = await _load_cfg()
+    grafana_cfg = target_settings_for_ui(cfg, "grafana")
+    grafana_cfg["payment_dashboard_url"] = str(cfg.get("grafana_payment_dashboard_url") or "")
     return {
-        "grafana": target_settings_for_ui(cfg, "grafana"),
+        "grafana": grafana_cfg,
         "zabbix": target_settings_for_ui(cfg, "zabbix"),
         "kuma": target_settings_for_ui(cfg, "kuma"),
         "auto_monitor_enabled": bool(cfg.get("observability_auto_monitor_enabled")),
@@ -193,13 +202,19 @@ async def save_observability_config(
     updates: list[str] = []
     params: list[object] = []
 
-    for field in ("grafana_url", "zabbix_web_url", "kuma_url"):
+    for field in ("grafana_url", "grafana_payment_dashboard_url", "zabbix_web_url", "kuma_app_url", "kuma_sync_url"):
         value = getattr(body, field)
         if value is not None:
             updates.append(f"{field}=%s")
             params.append(_normalize_url(value))
 
-    for field in ("grafana_username", "grafana_password", "zabbix_web_username", "zabbix_web_password"):
+    kuma_public_value = body.kuma_public_url if body.kuma_public_url is not None else body.kuma_url
+    if kuma_public_value is not None:
+        normalized_public = _normalize_url(kuma_public_value)
+        updates.extend(["kuma_public_url=%s", "kuma_url=%s"])
+        params.extend([normalized_public, normalized_public])
+
+    for field in ("grafana_username", "grafana_password", "zabbix_web_username", "zabbix_web_password", "kuma_username", "kuma_password"):
         value = getattr(body, field)
         if value is not None:
             updates.append(f"{field}=%s")
@@ -299,3 +314,58 @@ async def preflight_dashboard(
     result["auth_used"] = bool(auth)
     result["matched_target"] = matched_target or requested_target or None
     return result
+
+
+@router.get("/frame-proxy")
+async def frame_proxy(
+    request: Request,
+    url: str = Query(..., min_length=8, max_length=2000),
+    session: dict = Depends(get_session),
+):
+    """Server-side proxy for dashboard iframes — strips X-Frame-Options / CSP headers
+    so Grafana/Zabbix/Kuma can be embedded even when they send deny/sameorigin.
+    Auth credentials from the DB config are injected automatically.
+    Only allowed dashboard hosts (configured in Observability settings) are proxied.
+    """
+    cfg = await _load_cfg()
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(400, "Only http/https URLs allowed")
+    if parsed.username or parsed.password:
+        raise HTTPException(400, "URLs with embedded credentials are not allowed")
+    if not _allowed_target(parsed.hostname or "", request.url.hostname or "", cfg):
+        raise HTTPException(403, "Host not in configured dashboard list")
+
+    _matched_target, auth = credentials_for_url(cfg, url)
+
+    # Forward headers except host-specific ones
+    forward_headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in {"host", "origin", "referer", "cookie", "authorization"}
+    }
+
+    _DROP_RESPONSE_HEADERS = {
+        "x-frame-options", "content-security-policy",
+        "content-security-policy-report-only", "transfer-encoding",
+    }
+
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=20.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers=forward_headers, auth=auth)
+
+            # Stream response body, stripping embed-blocking headers
+            safe_headers = {
+                k: v for k, v in resp.headers.items()
+                if k.lower() not in _DROP_RESPONSE_HEADERS
+            }
+            safe_headers["x-proxied-by"] = "noc-sentinel"
+            content_type = resp.headers.get("content-type", "text/html")
+
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                headers=safe_headers,
+                media_type=content_type,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Proxy error: {exc}")

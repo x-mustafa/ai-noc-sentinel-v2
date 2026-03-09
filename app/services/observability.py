@@ -53,6 +53,21 @@ def mask_secret(value: str | None, *, keep_start: int = 2, keep_end: int = 2) ->
 def target_settings(cfg: dict | None, target: str | None) -> dict:
     config = cfg or {}
     normalized = normalize_target(target)
+    if normalized == "kuma":
+        public_url = str(config.get("kuma_public_url") or config.get("kuma_url") or DEFAULT_TARGET_URLS.get("kuma", "")).strip()
+        app_url = str(config.get("kuma_app_url") or "").strip()
+        sync_url = str(config.get("kuma_sync_url") or "").strip()
+        username = str(config.get("kuma_username") or "").strip()
+        password = str(config.get("kuma_password") or "").strip()
+        return {
+            "target": normalized,
+            "url": public_url,
+            "public_url": public_url,
+            "app_url": app_url,
+            "sync_url": sync_url,
+            "username": username,
+            "password": password,
+        }
     fields = TARGET_FIELD_MAP[normalized]
     url_value = str(config.get(fields["url"]) or DEFAULT_TARGET_URLS.get(normalized, "")).strip()
     data = {
@@ -66,20 +81,25 @@ def target_settings(cfg: dict | None, target: str | None) -> dict:
 
 def target_settings_for_ui(cfg: dict | None, target: str | None) -> dict:
     data = target_settings(cfg, target)
-    return {
+    payload = {
         "target": data["target"],
         "url": data["url"],
         "username": data["username"],
         "has_password": bool(data["password"]),
         "masked_password": mask_secret(data["password"]),
     }
+    if data["target"] == "kuma":
+        payload["public_url"] = data["url"]
+        payload["app_url"] = str(data.get("app_url") or "")
+        payload["sync_url"] = str(data.get("sync_url") or "")
+    return payload
 
 
 def configured_dashboard_hosts(cfg: dict | None) -> set[str]:
     config = cfg or {}
     hosts: set[str] = set()
-    for target in TARGET_FIELD_MAP:
-        url_value = str(config.get(TARGET_FIELD_MAP[target]["url"]) or "").strip()
+    for field_name in ("grafana_url", "zabbix_web_url", "kuma_public_url", "kuma_url", "kuma_app_url", "kuma_sync_url"):
+        url_value = str(config.get(field_name) or "").strip()
         if not url_value:
             continue
         parsed = urlparse(url_value)
@@ -114,12 +134,49 @@ def origin_from_url(raw_url: str) -> str:
     return ""
 
 
+def grafana_dashboard_uid_from_url(raw_url: str) -> str:
+    parsed = urlparse(str(raw_url or "").strip())
+    parts = [part for part in str(parsed.path or "").split("/") if part]
+    if len(parts) >= 2 and parts[0].lower() == "d":
+        return str(parts[1]).strip()
+    return ""
+
+
+def kuma_target_details(raw_url: str, cfg: dict | None = None) -> dict:
+    parsed = urlparse(str(raw_url or "").strip())
+    origin = origin_from_url(raw_url)
+    path_parts = [part for part in str(parsed.path or "").split("/") if part]
+    explicit_sync = str((cfg or {}).get("kuma_sync_url") or "").strip()
+    details = {
+        "mode": "custom_adapter",
+        "origin": origin,
+        "slug": "",
+        "status_api": f"{origin}/api/status" if origin else "",
+        "public_api": "",
+        "heartbeat_api": "",
+        "sync_url": explicit_sync or (f"{origin}/api/sentinel/override" if origin else ""),
+    }
+    if len(path_parts) >= 2 and path_parts[0].lower() == "status":
+        slug = path_parts[1]
+        details["mode"] = "uptime_kuma_status_page"
+        details["slug"] = slug
+        details["public_api"] = f"{origin}/api/status-page/{slug}" if origin else ""
+        details["heartbeat_api"] = f"{origin}/api/status-page/heartbeat/{slug}" if origin else ""
+        if explicit_sync:
+            details["sync_url"] = explicit_sync
+        elif parsed.port == 3001 and parsed.hostname:
+            details["sync_url"] = f"{parsed.scheme or 'http'}://{parsed.hostname}:3000/api/sentinel/override"
+        else:
+            details["sync_url"] = ""
+    return details
+
+
 def derive_kuma_sync_url(cfg: dict | None) -> str:
     target_cfg = target_settings(cfg, "kuma")
-    origin = origin_from_url(target_cfg.get("url", ""))
-    if not origin:
-        return ""
-    return f"{origin}/api/sentinel/override"
+    if str(target_cfg.get("sync_url") or "").strip():
+        return str(target_cfg.get("sync_url") or "").strip()
+    details = kuma_target_details(target_cfg.get("url", ""), cfg)
+    return str(details.get("sync_url") or "")
 
 
 def extract_html_title(html: str) -> str:
@@ -187,7 +244,15 @@ SERVICE_CATALOG: tuple[dict[str, object], ...] = (
             "card switch",
         ),
         "grafana_keywords": ("api", "payment", "transaction", "gateway", "latency"),
-        "kuma_keywords": ("card api", "payment api", "gateway", "transaction", "api"),
+        "kuma_keywords": (
+            "api services",
+            "payment processing",
+            "card api",
+            "payment api",
+            "gateway",
+            "transaction",
+            "api",
+        ),
     },
     {
         "id": "pos_network",
@@ -239,7 +304,7 @@ SERVICE_CATALOG: tuple[dict[str, object], ...] = (
             "network",
         ),
         "grafana_keywords": ("network", "switch", "router", "interface", "uplink"),
-        "kuma_keywords": ("network", "switch", "router", "core"),
+        "kuma_keywords": ("payment networks", "network", "switch", "router", "core"),
     },
     {
         "id": "platform_compute",
@@ -262,7 +327,7 @@ SERVICE_CATALOG: tuple[dict[str, object], ...] = (
             "windows",
         ),
         "grafana_keywords": ("inventory", "system", "trend", "host", "server", "database"),
-        "kuma_keywords": ("platform", "compute", "database", "server"),
+        "kuma_keywords": ("infrastructure", "platform", "compute", "database", "server"),
     },
     {
         "id": "observability_stack",
@@ -488,6 +553,25 @@ def build_service_monitoring_board(zabbix: dict, grafana: dict, kuma: dict) -> l
         _append_unique(service["matched_dashboards"], title, limit=3)
         _append_unique(service["evidence"], f"Grafana dashboard available: {title}", limit=5)
 
+    payment_service = board["payment_core"]
+    payment_reference = grafana.get("payment_reference") or {}
+    if str(payment_reference.get("source") or "") == "grafana":
+        payment_service["source_states"]["grafana"] = "primary_reference"
+        ref_title = str(payment_reference.get("dashboard_title") or "Card API")
+        ref_panel = str(payment_reference.get("panel_title") or "").strip()
+        ref_note = f"Primary payment reference is Grafana dashboard '{ref_title}'"
+        if ref_panel:
+            ref_note += f", first panel '{ref_panel}'"
+        ref_note += "."
+        _append_unique(payment_service["matched_dashboards"], ref_title, limit=3)
+        _append_unique(payment_service["evidence"], ref_note, limit=5)
+    elif str(grafana.get("status") or "") != "not_configured":
+        _append_unique(
+            payment_service["evidence"],
+            "Primary payment reference is falling back to Zabbix because the Grafana 'Card API' dashboard is not available.",
+            limit=5,
+        )
+
     kuma_status = str(kuma.get("status") or "unknown")
     kuma_groups = kuma.get("groups") or []
     if kuma_status == "error":
@@ -687,8 +771,7 @@ async def collect_monitoring_snapshot(cfg: dict | None) -> dict:
         problems = await call_zabbix(
             "problem.get",
             {
-                "output": ["eventid", "name", "severity"],
-                "selectHosts": ["host", "name"],
+                "output": ["eventid", "name", "severity", "objectid"],
                 "recent": True,
                 "sortfield": "eventid",
                 "sortorder": "DESC",
@@ -696,18 +779,32 @@ async def collect_monitoring_snapshot(cfg: dict | None) -> dict:
             },
         )
         if isinstance(problems, list):
+            # Fetch host names for these triggers in a single batch call
+            trigger_ids = [str(p["objectid"]) for p in problems if isinstance(p, dict) and p.get("objectid")]
+            host_by_trigger: dict = {}
+            if trigger_ids:
+                triggers = await call_zabbix(
+                    "trigger.get",
+                    {
+                        "output": ["triggerid"],
+                        "selectHosts": ["host"],
+                        "triggerids": trigger_ids,
+                    },
+                )
+                if isinstance(triggers, list):
+                    for t in triggers:
+                        hosts = t.get("hosts") or []
+                        host_name = hosts[0].get("host", "") if hosts else ""
+                        host_by_trigger[str(t.get("triggerid", ""))] = host_name
+
             top_problems = []
             for item in problems[:12]:
-                hosts = item.get("hosts") if isinstance(item, dict) else []
-                first_host = ""
-                if isinstance(hosts, list) and hosts:
-                    host_row = hosts[0] if isinstance(hosts[0], dict) else {}
-                    first_host = str(host_row.get("host") or host_row.get("name") or "").strip()
+                tid = str(item.get("objectid", ""))
                 top_problems.append(
                     {
                         "name": item.get("name", "Unknown problem"),
                         "severity": int(item.get("severity") or 0),
-                        "host": first_host,
+                        "host": host_by_trigger.get(tid, ""),
                     }
                 )
             snapshot["zabbix"] = {
@@ -792,6 +889,8 @@ async def collect_grafana_overview(cfg: dict | None, snapshot: dict | None = Non
     config = cfg or {}
     target_cfg = target_settings(config, "grafana")
     url = target_cfg.get("url", "")
+    payment_dashboard_url = str(config.get("grafana_payment_dashboard_url") or "").strip()
+    payment_dashboard_uid = grafana_dashboard_uid_from_url(payment_dashboard_url)
     auth = None
     if target_cfg.get("username") and target_cfg.get("password"):
         auth = (target_cfg["username"], target_cfg["password"])
@@ -805,7 +904,16 @@ async def collect_grafana_overview(cfg: dict | None, snapshot: dict | None = Non
         "auth_status": "not_configured" if not auth else "unknown",
         "dashboard_access": dashboard_access_state((snapshot or {}).get("dashboards", {}).get("grafana")),
         "auth_hint": "",
+        "dashboard_count": 0,
         "dashboards": [],
+        "payment_reference": {
+            "source": "zabbix_fallback",
+            "dashboard_title": "",
+            "panel_title": "",
+            "dashboard_url": payment_dashboard_url,
+            "uid": payment_dashboard_uid,
+            "reason": "Grafana 'Card API' dashboard was not found; payment monitoring falls back to Zabbix.",
+        },
     }
     if not url:
         return overview
@@ -840,7 +948,42 @@ async def collect_grafana_overview(cfg: dict | None, snapshot: dict | None = Non
                 overview["status"] = "degraded"
 
             if auth:
-                search = await client.get(f"{origin}/api/search?limit=6", auth=auth)
+                if payment_dashboard_uid:
+                    try:
+                        dashboard_resp = await client.get(
+                            f"{origin}/api/dashboards/uid/{payment_dashboard_uid}",
+                            auth=auth,
+                        )
+                        if dashboard_resp.status_code == 200:
+                            dashboard_payload = dashboard_resp.json()
+                            dashboard_data = (dashboard_payload or {}).get("dashboard") or {}
+                            panels = dashboard_data.get("panels") or []
+                            first_panel = panels[0] if isinstance(panels, list) and panels else {}
+                            overview["payment_reference"] = {
+                                "source": "grafana",
+                                "dashboard_title": str(dashboard_data.get("title") or "Card API"),
+                                "panel_title": str(
+                                    (first_panel or {}).get("title")
+                                    or (first_panel or {}).get("description")
+                                    or ""
+                                ),
+                                "dashboard_url": payment_dashboard_url or f"/d/{payment_dashboard_uid}",
+                                "uid": payment_dashboard_uid,
+                            }
+                        elif dashboard_resp.status_code in (401, 403):
+                            overview["payment_reference"]["reason"] = (
+                                "Configured payment dashboard exists but Grafana rejected direct dashboard access; "
+                                "payment monitoring falls back to Zabbix."
+                            )
+                        else:
+                            overview["payment_reference"]["reason"] = (
+                                "Configured payment dashboard was not returned by Grafana; payment monitoring falls back to Zabbix."
+                            )
+                    except Exception:
+                        overview["payment_reference"]["reason"] = (
+                            "Configured payment dashboard could not be queried from Grafana; payment monitoring falls back to Zabbix."
+                        )
+                search = await client.get(f"{origin}/api/search?limit=20", auth=auth)
                 if search.status_code == 200:
                     overview["auth_status"] = "ok"
                     try:
@@ -857,10 +1000,50 @@ async def collect_grafana_overview(cfg: dict | None, snapshot: dict | None = Non
                                 {
                                     "title": str(item.get("title") or item.get("name") or "Untitled"),
                                     "url": str(item.get("url") or ""),
+                                    "uid": str(item.get("uid") or ""),
                                     "type": str(item.get("type") or ""),
                                 }
                                 for item in dashboard_items[:6]
                             ]
+                            reference_item = next(
+                                (
+                                    item for item in dashboard_items
+                                    if "card api" in str(item.get("title") or item.get("name") or "").lower()
+                                ),
+                                None,
+                            )
+                            if (
+                                isinstance(reference_item, dict)
+                                and str((overview.get("payment_reference") or {}).get("source") or "") != "grafana"
+                            ):
+                                reference = {
+                                    "source": "grafana",
+                                    "dashboard_title": str(reference_item.get("title") or reference_item.get("name") or "Card API"),
+                                    "panel_title": "",
+                                    "dashboard_url": str(reference_item.get("url") or ""),
+                                    "uid": str(reference_item.get("uid") or ""),
+                                }
+                                dashboard_uid = str(reference_item.get("uid") or "").strip()
+                                if dashboard_uid:
+                                    try:
+                                        dashboard_resp = await client.get(
+                                            f"{origin}/api/dashboards/uid/{dashboard_uid}",
+                                            auth=auth,
+                                        )
+                                        if dashboard_resp.status_code == 200:
+                                            dashboard_payload = dashboard_resp.json()
+                                            panels = (
+                                                ((dashboard_payload or {}).get("dashboard") or {}).get("panels")
+                                                or []
+                                            )
+                                            first_panel = panels[0] if isinstance(panels, list) and panels else {}
+                                            if isinstance(first_panel, dict):
+                                                reference["panel_title"] = str(
+                                                    first_panel.get("title") or first_panel.get("description") or ""
+                                                )
+                                    except Exception:
+                                        pass
+                                overview["payment_reference"] = reference
                         else:
                             overview["dashboard_count"] = 0
                     except Exception:
@@ -902,9 +1085,11 @@ async def collect_kuma_overview(cfg: dict | None, summary: dict | None = None) -
     target_cfg = target_settings(config, "kuma")
     url = target_cfg.get("url", "")
     recommendation = summary or {}
+    target_meta = kuma_target_details(url, cfg)
     overview = {
         "status": "not_configured" if not url else "unknown",
         "url": url,
+        "mode": str(target_meta.get("mode") or "custom_adapter"),
         "page_title": "",
         "status_text": "",
         "page_state": "unknown",
@@ -919,17 +1104,38 @@ async def collect_kuma_overview(cfg: dict | None, summary: dict | None = None) -
         return overview
 
     try:
-        origin = origin_from_url(url)
+        origin = str(target_meta.get("origin") or "")
         async with httpx.AsyncClient(
             timeout=12,
             verify=settings.outbound_tls_verify,
             follow_redirects=True,
         ) as client:
             api_response = None
-            if origin:
+            heartbeat_response = None
+            if target_meta.get("mode") == "uptime_kuma_status_page" and target_meta.get("public_api"):
                 try:
                     api_response = await client.get(
-                        f"{origin}/api/status",
+                        str(target_meta.get("public_api")),
+                        headers={
+                            "User-Agent": "NOC-Sentinel-Kuma-Overview/1.0",
+                            "Accept": "application/json,text/plain,*/*",
+                        },
+                    )
+                    if target_meta.get("heartbeat_api"):
+                        heartbeat_response = await client.get(
+                            str(target_meta.get("heartbeat_api")),
+                            headers={
+                                "User-Agent": "NOC-Sentinel-Kuma-Overview/1.0",
+                                "Accept": "application/json,text/plain,*/*",
+                            },
+                        )
+                except Exception:
+                    api_response = None
+                    heartbeat_response = None
+            elif origin:
+                try:
+                    api_response = await client.get(
+                        str(target_meta.get("status_api") or f"{origin}/api/status"),
                         headers={
                             "User-Agent": "NOC-Sentinel-Kuma-Overview/1.0",
                             "Accept": "application/json,text/plain,*/*",
@@ -940,6 +1146,67 @@ async def collect_kuma_overview(cfg: dict | None, summary: dict | None = None) -
 
             if api_response is not None and api_response.status_code == 200:
                 payload = api_response.json()
+                if target_meta.get("mode") == "uptime_kuma_status_page":
+                    public_groups = payload.get("publicGroupList") if isinstance(payload, dict) else []
+                    incidents = payload.get("incidents") if isinstance(payload, dict) else []
+                    heartbeat_payload = heartbeat_response.json() if (heartbeat_response is not None and heartbeat_response.status_code == 200) else {}
+                    heartbeat_list = heartbeat_payload.get("heartbeatList") if isinstance(heartbeat_payload, dict) else {}
+                    built_groups: list[dict] = []
+                    overall_rank = 0
+                    for group in (public_groups or [])[:8]:
+                        monitors = group.get("monitorList") if isinstance(group, dict) else []
+                        if isinstance(monitors, list) and monitors:
+                            for mon in monitors[:12]:
+                                mon_id = str(mon.get("id") or "")
+                                series = heartbeat_list.get(mon_id) if isinstance(heartbeat_list, dict) else None
+                                latest = series[0] if isinstance(series, list) and series else {}
+                                status_code = int(latest.get("status") or 0) if isinstance(latest, dict) else 0
+                                if status_code == 1:
+                                    group_state = "operational"
+                                elif status_code == 0:
+                                    group_state = "outage"
+                                else:
+                                    group_state = "degraded"
+                                overall_rank = max(overall_rank, _public_state_rank(group_state))
+                                built_groups.append(
+                                    {
+                                        "label": str(mon.get("name") or mon.get("label") or mon.get("id") or "Monitor"),
+                                        "status": normalize_kuma_state(group_state),
+                                        "down_count": 1 if status_code == 0 else 0,
+                                        "degraded_count": 1 if status_code not in {0, 1} else 0,
+                                        "parent_group": str(group.get("name") or group.get("label") or ""),
+                                    }
+                                )
+                            continue
+
+                        built_groups.append(
+                            {
+                                "label": str(group.get("name") or group.get("label") or group.get("id") or "Group"),
+                                "status": "unknown",
+                                "down_count": 0,
+                                "degraded_count": 0,
+                            }
+                        )
+                    overall = (
+                        "outage" if overall_rank >= 2
+                        else "degraded" if overall_rank >= 1
+                        else "operational"
+                    )
+                    overview["http_status"] = api_response.status_code
+                    overview["page_title"] = str((payload.get("config") or {}).get("title") or "")
+                    overview["page_state"] = overall
+                    overview["status_text"] = humanize_kuma_state(overall)
+                    overview["status"] = "ok"
+                    overview["api_status"] = "ok"
+                    overview["group_count"] = len(built_groups)
+                    overview["problem_count"] = sum(1 for item in built_groups if item.get("status") in {"degraded", "outage"})
+                    if isinstance(incidents, list):
+                        overview["problem_count"] = max(overview["problem_count"], len(incidents))
+                    overview["groups"] = built_groups[:6]
+                    overview["incident_count"] = len(incidents) if isinstance(incidents, list) else 0
+                    overview["sync_mode"] = "adapter_required"
+                    return overview
+
                 groups = payload.get("groups") if isinstance(payload, dict) else []
                 problems = payload.get("problems") if isinstance(payload, dict) else []
                 overall = normalize_kuma_state((payload or {}).get("overall"))
@@ -963,6 +1230,7 @@ async def collect_kuma_overview(cfg: dict | None, summary: dict | None = None) -
                 overview["sentinel_override_active"] = bool(
                     isinstance(override, dict) and override.get("active")
                 )
+                overview["sync_mode"] = "native_adapter"
                 return overview
 
             response = await client.get(

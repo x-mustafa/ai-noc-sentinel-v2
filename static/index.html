@@ -6622,14 +6622,12 @@ async function obsLoadFrame(forceReload=false){
     return;
   }
   if(preflight.frame_allowed === false){
-    const reason = preflight.frame_reason || 'The upstream service is blocking frame embedding.';
-    obsShowFrameOverlay(
-      `${_obsCurrentTarget.toUpperCase()} Blocks Embedding`,
-      `This target refuses to render inside an iframe. ${reason}. Use Open Externally, or change the upstream service headers if you want true in-app embedding.`,
-      'warn'
-    );
-    obsSetStatus(`${_obsCurrentTarget.toUpperCase()} is blocking embeds.`, meta);
-    obsSetHint(_obsCurrentTarget);
+    // Auto-switch to server-side proxy which strips X-Frame-Options
+    const proxyUrl = `/api/observability/frame-proxy?url=${encodeURIComponent(rawUrl)}`;
+    obsHideFrameOverlay();
+    obsSetStatus(`${_obsCurrentTarget.toUpperCase()} blocks direct embedding — using server proxy...`, meta);
+    frame.onload = () => obsSetStatus(`${_obsCurrentTarget.toUpperCase()} loaded via server proxy.`, meta);
+    frame.src = forceReload ? obsUrlWithBust(proxyUrl) : proxyUrl;
     return;
   }
   obsHideFrameOverlay();
