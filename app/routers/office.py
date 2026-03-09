@@ -19,7 +19,7 @@ from typing import Optional, List, Any, Literal
 from app.config import settings
 from app.deps import get_session, require_admin, require_operator
 from app.database import fetch_one, fetch_all, execute
-from app.services.ai_provider import provider_candidates, resolve_runtime_ai
+from app.services.ai_provider import provider_candidates, resolve_runtime_ai, NO_KEY_PROVIDERS
 from app.services.ai_stream import extract_error_chunk, extract_text_chunk, stream_ai
 from app.services.doc_extract import extract_doc_text
 from app.services.memory import get_memory_context, save_memory, get_memories
@@ -282,7 +282,7 @@ async def run_task(body: RunTaskBody, session: dict = Depends(get_session)):
         requested_model,
         fallback_provider=cfg.get("default_ai_provider") or "claude",
     )
-    if not api_key and provider != "ollama":
+    if not api_key and provider not in NO_KEY_PROVIDERS:
         raise HTTPException(400, f"{provider} API key not configured — go to Settings → AI Providers")
     candidates = provider_candidates(
         cfg,
@@ -525,7 +525,7 @@ async def run_task_sync(body: RunSyncBody):
         requested_model,
         fallback_provider=cfg.get("default_ai_provider") or "claude",
     )
-    if not api_key and provider != "ollama":
+    if not api_key and provider not in NO_KEY_PROVIDERS:
         raise HTTPException(400, f"{provider} API key not configured")
     candidates = provider_candidates(
         cfg,
@@ -875,7 +875,7 @@ async def collaborate(body: CollaborateBody, session: dict = Depends(get_session
         body.model_id or None,
         fallback_provider=cfg.get("default_ai_provider") or "claude",
     )
-    if not api_key:
+    if not api_key and provider not in NO_KEY_PROVIDERS:
         raise HTTPException(400, f"{provider} API key not configured — go to Settings → AI Providers")
 
     # Build network context string once

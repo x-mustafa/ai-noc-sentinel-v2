@@ -6,7 +6,7 @@ from typing import Optional, List, Any
 
 from app.deps import get_session
 from app.database import fetch_one
-from app.services.ai_provider import resolve_runtime_ai
+from app.services.ai_provider import resolve_runtime_ai, NO_KEY_PROVIDERS
 from app.services.ai_stream import stream_ai
 
 router = APIRouter()
@@ -53,7 +53,7 @@ async def chat(body: ChatBody, session: dict = Depends(get_session)):
     cfg = await fetch_one("SELECT * FROM zabbix_config LIMIT 1") or {}
 
     provider, model, api_key = resolve_runtime_ai(cfg)
-    if not api_key:
+    if not api_key and provider not in NO_KEY_PROVIDERS:
         raise HTTPException(400, "AI API key not configured — go to Settings → AI Providers")
 
     # Build stats summary
